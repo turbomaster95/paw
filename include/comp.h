@@ -10,6 +10,30 @@ typedef union {
     struct nu_ast_node *node;
 } YYSTYPE;
 
+typedef enum {
+    VAR_START = 0,
+    VAR_INT,
+    VAR_STRING,
+} var_type_t;
+
+struct Symb {
+    char *name;
+    var_type_t type;
+    int val;
+    int scope; /* local or global, in future tho.. */
+    struct Symb *next;
+};
+
+typedef struct Symb symb;
+
+typedef struct symbol_table {
+    symb *head;
+} symbt;
+
+symb *symtab_add(symbt *table, const char *name, var_type_t type);
+
+symb *symtab_lookup(symbt *table, const char *name);
+
 extern YYSTYPE yylval;
 
 enum TokenTypes {

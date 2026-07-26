@@ -1,2 +1,5 @@
 int x = 10;
+int y;
 return x;
+return y;
+return x + y;

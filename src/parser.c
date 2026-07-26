@@ -18,46 +18,7 @@ extern char* current_filename;
 static int current_tok;
 extern int tok_col;
 
-typedef enum {
-    VAR_START = 0,
-    VAR_INT,
-    VAR_STRING,
-} var_type_t;
-
-struct Symb {
-    char *name;
-    var_type_t type;
-    int scope; /* local or global, in future tho.. */
-    struct Symb *next;
-};
-
-typedef struct Symb symb;
-
-typedef struct symbol_table {
-    symb *head;
-} symbt;
-
-static symbt* SymTable;
-
-symb *symtab_add(symbt *table, const char *name, var_type_t type) {
-    if (!table) return NULL;
-    symb *sym = nu_alloc(g_mm, sizeof(symb));
-    sym->name = nu_strdup(name);
-    sym->type = type;
-    sym->next = table->head;
-    table->head = sym;
-    return sym;
-}
-
-symb *symtab_lookup(symbt *table, const char *name) {
-    if (!table) return NULL;
-    for (symb *curr = table->head; curr != NULL; curr = curr->next) {
-        if (strcmp(curr->name, name) == 0) {
-            return curr;
-        }
-    }
-    return NULL; /* Undeclared variable */
-}
+symbt* SymTable;
 
 const char *tokname(int token) {
     switch (token) {
@@ -118,27 +79,65 @@ static nu_ast_node_t *newstrnode(nu_ast_node_t *parent, uint32_t type, const cha
     return node;
 }
 
+nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
+    if (match('-')) {
+        advance();
+        nu_ast_node_t* neg_node = newnode(parent, AST_NEGATIVE);
+        parse_primary(neg_node);
+        return neg_node;
+    }
+    
+    if (match(CONSTANT)) {
+        nu_ast_node_t* node = newstrnode(parent, AST_CONST, yytext);
+        advance();
+        return node;
+    } else if (match(IDENTIFIER)) {
+        symb *sym = symtab_lookup(SymTable, yytext);
+        if (!sym) {
+            char errm[128];
+            snprintf(errm, sizeof(errm), "Unknown Variable '%s'", yytext);
+            synerr(yylineno, 0, errm);
+        }
+        nu_ast_node_t* node = newstrnode(parent, AST_IDENT, yytext);
+        advance();
+        return node;
+    }
+    synerr(yylineno, 0, "Expected expression");
+    return NULL;
+}
+
+nu_ast_node_t* parse_expression(nu_ast_node_t* parent) {
+    nu_ast_node_t* left = parse_primary(NULL);
+
+    while (match('+') || match('-')) {
+        uint32_t op_type = (current_tok == '+') ? AST_ADD : AST_SUB;
+        
+        nu_ast_node_t* op_node = newstrnode(NULL, op_type, yytext);
+        advance();
+
+        if (left) {
+            nu_ast_add_child(op_node, left);
+        }
+        parse_primary(op_node);
+        left = op_node;
+    }
+
+    if (left && parent) {
+        nu_ast_add_child(parent, left);
+    }
+
+    return left;
+}
+
 void parse_return_stmt(nu_ast_node_t* root) {
     expect(RETURN, "Expected 'return'");
 
     nu_ast_node_t* ret_node = newnode(root, AST_RETURN_STMT);
     
-    if (match(CONSTANT)) {
-        newstrnode(ret_node, AST_CONST, yytext);
-        advance();
+    if (!match(';')) {
+        parse_expression(ret_node);
     }
-
-    if (match(IDENTIFIER)) {
-        symb *sym = symtab_lookup(SymTable, yytext);
-        if (sym == NULL) {
-            char errm[128];
-            snprintf(errm, sizeof(errm), "Unknown Variable '%s'", yytext);
-            synerr(yylineno, tok_col, errm);
-        }
-        newstrnode(ret_node, AST_IDENT, yytext);
-        advance();
-    }
-
+    
     expect(';', "Expected ';' after return value");
 }
 

@@ -1,3 +1,4 @@
+#include "nus.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <nu.h>
@@ -9,7 +10,6 @@ void walk_ast(nu_ast_node_t *node) {
 
     switch (node->type) {
         case AST_ROOT: {
-            /* Top-level program scope: walk each statement sequentially */
             for (nu_ast_node_t *stmt = node->first_child; stmt != NULL; stmt = stmt->next_sibling) {
                 walk_ast(stmt);
             }
@@ -17,8 +17,6 @@ void walk_ast(nu_ast_node_t *node) {
         }
 
         case AST_INT_DECL: {
-            /* Child 1: AST_VAR_DECL (variable name)
-               Child 2 (optional): AST_CONST or AST_IDENT (initializer) */
             nu_ast_node_t *var_node = node->first_child;
             nu_ast_node_t *val_node = var_node ? var_node->next_sibling : NULL;
 
@@ -34,7 +32,6 @@ void walk_ast(nu_ast_node_t *node) {
         }
 
         case AST_RETURN_STMT: {
-            /* Child 1: AST_CONST or AST_IDENT */
             nu_ast_node_t *val_node = node->first_child;
 
             if (val_node) {
@@ -47,7 +44,7 @@ void walk_ast(nu_ast_node_t *node) {
         }
 
         default:
-            printf("[Walker] Unknown or leaf AST node type: %d\n", node->type);
+            fprintf(stderr, "Unknown or leaf AST node type: %d\n", node->type);
             break;
     }
 }
