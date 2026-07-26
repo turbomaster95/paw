@@ -8,6 +8,9 @@ CFLAGS := -Iinclude -Wall -Wextra
 Q = @
 
 C_SRCS   := $(wildcard $(SRC)/*.c)
+VM_SRCS  := $(wildcard $(SRC)/vm/*.c)
+C_SRCS   += $(VM_SRCS)
+
 GEN_SRCS := $(OBJ)/lex.yy.c
 
 OBJS := $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(C_SRCS)) $(GEN_SRCS:.c=.o)
@@ -17,6 +20,7 @@ all: setup $(OBJ)/libnu.a $(TARGET)
 
 setup:
 	$(Q)mkdir -p $(OBJ)
+	$(Q)mkdir -p $(OBJ)/vm
 
 $(OBJ)/lex.yy.c: $(SRC)/lex.l
 	$(Q)echo "  FLEX    $^"
