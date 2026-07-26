@@ -18,6 +18,7 @@ extern char* current_filename;
 
 static int current_tok;
 extern int tok_col;
+nu_ast_node_t *g_root_node = NULL;
 
 symbt* SymTable;
 
@@ -94,7 +95,9 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
         nu_ast_node_t* node = newstrnode(parent, AST_CONST, yytext);
         advance();
         return node;
-    } else if (match(IDENTIFIER)) {
+    }
+
+    if (match(IDENTIFIER)) {
         char name[64];
         snprintf(name, sizeof(name), "%s", yytext);
         advance();
@@ -113,13 +116,6 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
 
             expect(')', "Expected ')' after function arguments");
             return call_node;
-        }
-
-        symb *sym = symtab_lookup(SymTable, name);
-        if (!sym) {
-            char errm[128];
-            snprintf(errm, sizeof(errm), "Unknown Variable '%s'", name);
-            synerr(yylineno, 0, errm);
         }
 
         return newstrnode(parent, AST_IDENT, name);
@@ -170,27 +166,19 @@ void parse_integer_decl(nu_ast_node_t* root) {
     nu_ast_node_t* int_node = newnode(root, AST_INT_DECL);
 
     if (!match(IDENTIFIER)) {
-        synerr(yylineno, tok_col, "Expected an identifier for the int!");
+        synerr(yylineno, tok_col, "Expected an identifier for the integer!");
     }
 
     char* varname = nu_strdup(yytext);
     newstrnode(int_node, AST_VAR_DECL, yytext);
     advance();
 
-    symtab_add(SymTable, varname, VAR_INT);    
-    
+    symtab_add(SymTable, varname, VAR_INT);
     if (match('=')) {
         advance();
-
-        if (match(CONSTANT) || match(IDENTIFIER)) {
-            uint32_t val_type = match(CONSTANT) ? AST_CONST : AST_IDENT;
-            newstrnode(int_node, val_type, yytext);
-            advance();
-        } else {
-            synerr(yylineno, tok_col, "Expected a constant or identifier after '='");
-        }
+        parse_expression(int_node);
     }
-        
+
     expect(';', "Expected ';' after declaration");
 }
 
@@ -278,6 +266,7 @@ void parse(void) {
     advance(); /* prime the stream */
     nu_ast_node_t *root = newnode(NULL, AST_ROOT);
     g_ast->root = root;
+    g_root_node = root;
 
     SymTable = nu_alloc(g_mm, sizeof(symbt));
     SymTable->head = NULL;
