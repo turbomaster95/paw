@@ -1,8 +1,8 @@
 !.gitignore
 
 .vscode/
-lob
 *.o
 *.a
 *.so
 obj/
+paw

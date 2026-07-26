@@ -15,13 +15,13 @@ extern YYSTYPE yylval;
 enum TokenTypes {
     TOKEN_EOF = 0,
 
-    IDENTIFIER = 1,
-    CONSTANT = 2,
-    STRING_LITERAL = 3,
-    FUNC = 4,
-    IF = 5,
-    RETURN = 6,
-    INT = 7,
+    IDENTIFIER,
+    CONSTANT,
+    STRING_LITERAL,
+    FUNC,
+    IF,
+    RETURN,
+    INT,
 };
 
 #endif // TAB_H

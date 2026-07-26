@@ -13,7 +13,7 @@ GEN_SRCS := $(OBJ)/lex.yy.c
 OBJS := $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(C_SRCS)) $(GEN_SRCS:.c=.o)
 OBJS += $(OBJ)/libnu.a
 
-all: setup $(TARGET)
+all: setup $(OBJ)/libnu.a $(TARGET)
 
 setup:
 	$(Q)mkdir -p $(OBJ)
