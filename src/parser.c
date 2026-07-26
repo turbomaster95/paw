@@ -2,10 +2,15 @@
 #include <stdlib.h>
 #include <comp.h>
 #include <etc.h>
+#include <nu.h>
+#include <lang.h>
+#include <string.h>
 
 extern int yylex(void);
 extern char *yytext;
 extern int yylineno;
+extern nu_ast_t* g_ast;
+extern nu_mm_t* g_mm;
 
 static int current_tok;
 
@@ -54,21 +59,41 @@ static void expect(int expected, const char *msg) {
     }
 }
 
-void parse_return_stmt(void) {
+static nu_ast_node_t *newnode(nu_ast_node_t *parent, uint32_t type) {
+    nu_ast_node_t *node = nu_ast_new_node(g_ast, type);
+    if (parent) {
+        nu_ast_add_child(parent, node);
+    }
+    return node;
+}
+
+static nu_ast_node_t *newstrnode(nu_ast_node_t *parent, uint32_t type, const char *str) {
+    nu_ast_node_t *node = newnode(parent, type);
+    if (str) {
+        nu_ast_set_str(g_ast, node, str, strlen(str));
+    }
+    return node;
+}
+
+void parse_return_stmt(nu_ast_node_t* root) {
     expect(RETURN, "Expected 'return'");
 
+    nu_ast_node_t* ret_node = newnode(root, AST_RETURN_STMT);
+    
     if (match(CONSTANT) || match(IDENTIFIER)) {
         printf("Parsed return value: %s\n", yytext);
+        uint32_t val_type = match(CONSTANT) ? AST_CONST : AST_IDENT;
+        newstrnode(ret_node, val_type, yytext);
         advance();
     }
 
     expect(';', "Expected ';' after return value");
 }
 
-static void parse_statement(void) {
+static void parse_statement(nu_ast_node_t* root) {
     switch (current_tok) {
         case RETURN:
-            parse_return_stmt();
+            parse_return_stmt(root);
             break;
 
         default:
@@ -81,10 +106,31 @@ static void parse_statement(void) {
     }
 }
 
-void parse(void) {
-    advance(); /* Prime the token stream */
+void print_ast(nu_ast_node_t *node, int depth) {
+    if (!node) return;
 
-    while (current_tok != 0) {
-        parse_statement();
+    for (int i = 0; i < depth; i++) printf("  ");
+
+    printf("- [%s]", ast_type_name(node->type));
+    if (node->val.str) {
+        printf(" \"%s\"", node->val.str);
+    } else if (node->val.i64) {
+        printf(" %ld", node->val.i64);
     }
+    printf("\n");
+
+    for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+        print_ast(child, depth + 1);
+    }
+}
+
+void parse(void) {
+    advance(); /* prime the stream */
+    nu_ast_node_t *root = newnode(NULL, AST_ROOT);
+    g_ast->root = root;
+   
+    while (current_tok != 0) {
+        parse_statement(root);
+    }
+    print_ast(root, 0);
 }
