@@ -3,6 +3,18 @@
 
 #include <stdint.h>
 
+enum TokenTypes {
+    TOKEN_EOF = 0,
+    IDENTIFIER,
+    CONSTANT,
+    STRING_LITERAL,
+    FUNC,
+    IF,
+    RETURN,
+    INT,
+    CONST,
+};
+
 typedef union {
     int64_t int_val;
     double float_val;
@@ -30,22 +42,12 @@ typedef struct symbol_table {
     symb *head;
 } symbt;
 
+extern symbt* SymTable;
+
 symb *symtab_add(symbt *table, const char *name, var_type_t type);
 
 symb *symtab_lookup(symbt *table, const char *name);
 
 extern YYSTYPE yylval;
-
-enum TokenTypes {
-    TOKEN_EOF = 0,
-
-    IDENTIFIER,
-    CONSTANT,
-    STRING_LITERAL,
-    FUNC,
-    IF,
-    RETURN,
-    INT,
-};
 
 #endif // TAB_H

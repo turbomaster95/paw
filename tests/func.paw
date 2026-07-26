@@ -1,0 +1,9 @@
+func main() {
+	int x = 10;
+	return x;
+}
+
+func one() {
+	int x = main();
+	return x + 10;
+}

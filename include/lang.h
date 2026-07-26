@@ -16,7 +16,12 @@
     X(AST_SUB) \
     X(AST_MUL) \
     X(AST_DIV) \
-    X(AST_NEGATIVE)
+    X(AST_FUNC_DECL) \
+    X(AST_FUNC_CALL) \
+    X(AST_NEGATIVE) \
+    X(AST_PARAM_LIST) \
+    X(AST_PARAM) \
+    X(AST_BLOCK)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

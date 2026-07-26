@@ -7,6 +7,7 @@
 #include <glog.h>
 #include <string.h>
 #include <nus.h>
+#include <type.h>
 
 extern int yylex(void);
 extern char *yytext;
@@ -19,6 +20,8 @@ static int current_tok;
 extern int tok_col;
 
 symbt* SymTable;
+
+nu_ast_node_t* parse_expression(nu_ast_node_t* parent);
 
 const char *tokname(int token) {
     switch (token) {
@@ -86,22 +89,42 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
         parse_primary(neg_node);
         return neg_node;
     }
-    
+
     if (match(CONSTANT)) {
         nu_ast_node_t* node = newstrnode(parent, AST_CONST, yytext);
         advance();
         return node;
     } else if (match(IDENTIFIER)) {
-        symb *sym = symtab_lookup(SymTable, yytext);
+        char name[64];
+        snprintf(name, sizeof(name), "%s", yytext);
+        advance();
+
+        if (match('(')) {
+            advance();
+
+            nu_ast_node_t* call_node = newstrnode(parent, AST_FUNC_CALL, name);
+
+            while (!match(')') && current_tok != 0) {
+                parse_expression(call_node);
+                if (match(',')) {
+                    advance();
+                }
+            }
+
+            expect(')', "Expected ')' after function arguments");
+            return call_node;
+        }
+
+        symb *sym = symtab_lookup(SymTable, name);
         if (!sym) {
             char errm[128];
-            snprintf(errm, sizeof(errm), "Unknown Variable '%s'", yytext);
+            snprintf(errm, sizeof(errm), "Unknown Variable '%s'", name);
             synerr(yylineno, 0, errm);
         }
-        nu_ast_node_t* node = newstrnode(parent, AST_IDENT, yytext);
-        advance();
-        return node;
+
+        return newstrnode(parent, AST_IDENT, name);
     }
+
     synerr(yylineno, 0, "Expected expression");
     return NULL;
 }
@@ -171,6 +194,33 @@ void parse_integer_decl(nu_ast_node_t* root) {
     expect(';', "Expected ';' after declaration");
 }
 
+
+void parse_block(nu_ast_node_t* parent);
+
+void parse_function_decl(nu_ast_node_t* root) {
+    expect(FUNC, "Expected 'func'");
+
+    char func_name[64];
+    snprintf(func_name, sizeof(func_name), "%s", yytext);
+    expect(IDENTIFIER, "Expected function name");
+
+    nu_ast_node_t* fn_node = newstrnode(root, AST_FUNC_DECL, func_name);
+    expect('(', "Expected '(' after function name");
+    nu_ast_node_t* param_list = newnode(fn_node, AST_PARAM_LIST);
+
+    while (!match(')') && current_tok != 0) {
+        if (match(TYPE_INT)) advance();
+        if (match(IDENTIFIER)) {
+            newstrnode(param_list, AST_PARAM, yytext);
+            advance();
+        }
+        if (match(',')) advance();
+    }
+    expect(')', "Expected ')' after parameters");
+
+    parse_block(fn_node);
+}
+
 static void parse_statement(nu_ast_node_t* root) {
     switch (current_tok) {
         case RETURN:
@@ -180,7 +230,11 @@ static void parse_statement(nu_ast_node_t* root) {
         case INT:
             parse_integer_decl(root);
             break;
-            
+
+        case FUNC:
+            parse_function_decl(root);
+            break;
+                        
         default:
             char errm[128];        
             snprintf(errm, sizeof(errm),
@@ -189,6 +243,17 @@ static void parse_statement(nu_ast_node_t* root) {
             advance(); /* Skip token to prevent infinite loop */
             break;
     }
+}
+
+void parse_block(nu_ast_node_t* parent) {
+    expect('{', "Expected '{' to start block");
+    nu_ast_node_t* block_node = newnode(parent, AST_BLOCK);
+
+    while (!match('}') && current_tok != 0) {
+        parse_statement(block_node);
+    }
+
+    expect('}', "Expected '}' at end of block");
 }
 
 void print_ast(nu_ast_node_t *node, int depth) {

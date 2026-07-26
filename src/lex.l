@@ -24,6 +24,7 @@ void complain(void);
 int tok_col = 1;
 
 int errcnt = 0;
+
 #define YY_USER_ACTION tok_col += yyleng;
 
 %}
@@ -35,6 +36,7 @@ int errcnt = 0;
 "func"                  { return(FUNC); }
 "if"                    { return(IF); }
 "int"                   { return(INT); }
+"const"                 { return(CONST); }
 "return"                { return(RETURN); }
 
 {IDENT_HEAD}({IDENT_HEAD}|{DIGIT})* {
