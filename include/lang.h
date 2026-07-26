@@ -9,7 +9,9 @@
     X(AST_CONST) \
     X(AST_IDENT) \
     X(AST_EXPR_BINARY) \
-    X(AST_ASSIGN_STMT)
+    X(AST_ASSIGN_STMT) \
+    X(AST_INT_DECL) \
+    X(AST_VAR_DECL)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

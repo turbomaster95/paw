@@ -3,6 +3,7 @@
 #include <comp.h>
 #include <etc.h>
 #include <nu.h>
+#include <glog.h>
 
 extern int yylex(void);
 extern FILE *yyin;
@@ -18,17 +19,22 @@ char backing[1024 * 1024 * 8]; // 8 mb
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <source_file>\n", argv[0]);
+        glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s <source_file>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    g_mm = nu_mm_create(NU_MM_SLOB, backing, sizeof(backing));
+    g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
     g_ast = nu_ast_create(g_mm);
-       
+
+    glog_init();
+    glog_config.show_source = true;
+    glog_config.use_color = 1;
+    glog_config.prefix = "paw";
+
     current_filename = argv[1];
     yyin = fopen(current_filename, "r");
     if (!yyin) {
-        perror("Error opening file");
+        glog_log(current_filename, 0, 0, GLOG_FATAL, "Error Opening file!");
         goto fail;
     }
 
