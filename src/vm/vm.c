@@ -43,7 +43,7 @@ static void runtime_error(VM *vm, const char *format, ...) {
     for (int i = vm->frame_count - 1; i >= 0; i--) {
         CallFrame *frame = &vm->frames[i];
         size_t instruction = frame->ip - frame->chunk->code - 1;
-        fprintf(stderr, "[frame %d] offset %04ld in chunk\n", i, instruction);
+        fprintf(stderr, "[frame %d] offset %04ld in chunk\n", i, (long)instruction);
     }
 
     vm_init(vm);
@@ -171,7 +171,12 @@ InterpretResult vm_run(VM *vm, Chunk *main_chunk) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
+                Value func_val = vm_pop(vm);
+                int func_address = (int)func_val;
+
                 CallFrame *next_frame = &vm->frames[vm->frame_count++];
+                next_frame->chunk = frame->chunk;
+                next_frame->ip = frame->chunk->code + func_address;
                 next_frame->slots = vm->stack_top - arg_count;
                 frame = next_frame;
                 break;
@@ -182,7 +187,7 @@ InterpretResult vm_run(VM *vm, Chunk *main_chunk) {
                 vm->frame_count--;
 
                 if (vm->frame_count == 0) {
-                    vm_pop(vm); /* Pop main frame */
+                    vm->stack_top = vm->stack;
                     vm_push(vm, result);
                     return INTERPRET_OK;
                 }

@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <vm.h>
+#include <nu.h>
 
 typedef enum {
     AST_NUMBER,
@@ -67,6 +68,6 @@ struct ASTNode {
     };
 };
 
-bool compile_ast(ASTNode *root, Chunk *chunk);
+bool compile_ast(nu_ast_node_t *root, Chunk *chunk);
 
 #endif
