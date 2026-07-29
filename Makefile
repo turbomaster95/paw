@@ -4,12 +4,13 @@ TARGET := paw
 
 CC := gcc
 CFLAGS := -Iinclude -Wall -Wextra
+COPTS := 
+
+CFLAGS += $(COPTS)
 
 Q = @
 
 C_SRCS   := $(wildcard $(SRC)/*.c)
-VM_SRCS  := $(wildcard $(SRC)/vm/*.c)
-C_SRCS   += $(VM_SRCS)
 
 GEN_SRCS := $(OBJ)/lex.yy.c
 
@@ -20,7 +21,6 @@ all: setup $(OBJ)/libnu.a $(TARGET)
 
 setup:
 	$(Q)mkdir -p $(OBJ)
-	$(Q)mkdir -p $(OBJ)/vm
 
 $(OBJ)/lex.yy.c: $(SRC)/lex.l
 	$(Q)echo "  FLEX    $^"
@@ -48,8 +48,9 @@ CLEANF += include/nu.h include/nus.h
 include/nu.h: $(OBJ)/libnu.a
 
 clean:
-	$(Q)rm -rf $(OBJ) $(TARGET)
-	$(Q)rm -rf $(CLEANF)
+	rm -rf $(OBJ) $(TARGET)
+	rm -rf $(CLEANF)
+
 FORCE:
 
 .PHONY: all setup clean FORCE
