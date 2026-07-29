@@ -53,8 +53,6 @@ int main(int argc, char **argv) {
         goto fail;
     }
 
-    parse();
-
     nu_ast_destroy(g_ast);
     nu_mm_destroy(g_mm);
 
