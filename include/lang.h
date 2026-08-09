@@ -23,7 +23,8 @@
     X(AST_PARAM_LIST) \
     X(AST_PARAM) \
     X(AST_BLOCK) \
-    X(AST_PRINTF_STMT)
+    X(AST_PRINTF_STMT) \
+    X(AST_PRINT_STMT)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

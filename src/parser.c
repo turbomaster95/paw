@@ -218,18 +218,31 @@ void parse_constvar_decl(nu_ast_node_t* root) {
     expect(';', "Expected ';' after declaration");
 }
 
+void parse_print_stmt(nu_ast_node_t* parent) {
+    expect(PRINT, "Expected 'print'");
+    nu_ast_node_t* print_node = newnode(parent, AST_PRINT_STMT);
+    parse_expression(print_node);
+    expect(';', "Expected ';' after print statement");
+}
+
 void parse_printf_stmt(nu_ast_node_t* parent) {
     expect(PRINTF, "Expected 'printf'");
-    
-    bool has_paren = match('(');
-    if (has_paren) advance();
+    expect('(', "Expected '(' after 'printf'");
 
-    nu_ast_node_t* print_node = newnode(parent, AST_PRINTF_STMT);
-    parse_expression(print_node);
-
-    if (has_paren) {
-        expect(')', "Expected ')' after printf expression");
+    if (!match(STRING_LITERAL)) {
+        synerr(yylineno, tok_col, "Expected format string in printf");
     }
+
+    nu_ast_node_t* printf_node = newnode(parent, AST_PRINTF_STMT);
+    newstrnode(printf_node, AST_CONST, yytext);
+    advance();
+
+    while (match(',')) {
+        advance();
+        parse_expression(printf_node);
+    }
+
+    expect(')', "Expected ')' after printf arguments");
     expect(';', "Expected ';' after printf statement");
 }
 
@@ -279,6 +292,10 @@ static void parse_statement(nu_ast_node_t* root) {
 
         case PRINTF:
             parse_printf_stmt(root);
+            break;
+
+        case PRINT:
+            parse_print_stmt(root);
             break;
                         
         default:

@@ -40,6 +40,7 @@ int errcnt = 0;
 "const"                 { return(CONST); }
 "return"                { return(RETURN); }
 "printf"                { return(PRINTF); }
+"print"                 { return(PRINT); }
 
 {IDENT_HEAD}({IDENT_HEAD}|{DIGIT})* {
     yylval.str_val = strdup(yytext);

@@ -192,6 +192,15 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
+	case AST_PRINT_STMT: {
+	    nu_ast_node_t *expr = node->first_child;
+	    if (expr) {
+	        compile_expr(expr, R0);
+	        emit(PRINT(R0));
+	    }
+	    break;
+	}
+
 	case AST_INT_DECL:
         case AST_CONST_DECL: {
             nu_ast_node_t *var_node = node->first_child;

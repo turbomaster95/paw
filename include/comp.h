@@ -14,7 +14,8 @@ enum TokenTypes {
     INT,
     CHAR,
     CONST,
-    PRINTF
+    PRINTF,
+    PRINT
 };
 
 typedef union {
