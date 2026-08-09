@@ -32,6 +32,20 @@ static void emit(Instruction inst) {
     code_buf->instructions[code_buf->count++] = inst;
 }
 
+static void exec_vsnprintf(const char *fmt, int count, int *args) {
+    char buf[512];
+
+    switch (count) {
+        case 0: snprintf(buf, sizeof(buf), "%s", fmt); break;
+        case 1: snprintf(buf, sizeof(buf), fmt, args[0]); break;
+        case 2: snprintf(buf, sizeof(buf), fmt, args[0], args[1]); break;
+        case 3: snprintf(buf, sizeof(buf), fmt, args[0], args[1], args[2]); break;
+        default: snprintf(buf, sizeof(buf), fmt, args[0], args[1], args[2], args[3]); break;
+    }
+
+    printf("%s", buf);
+}
+
 static int get_node_value(nu_ast_node_t *node) {
     if (!node) return 0;
     if (node->type == AST_CONST) {
@@ -184,11 +198,17 @@ void compile_node(nu_ast_node_t *node) {
         }
 
 	case AST_PRINTF_STMT: {
-            nu_ast_node_t *expr = node->first_child;
-            if (expr) {
-                compile_expr(expr, R0);
-                emit(PRINT(R0));
+            nu_ast_node_t *fmt_node = node->first_child;
+            if (!fmt_node) break;
+
+            int args[16];
+            int count = 0;
+            nu_ast_node_t *arg = fmt_node->next_sibling;
+            while (arg && count < 16) {
+                args[count++] = get_node_value(arg);
+                arg = arg->next_sibling;
             }
+            exec_vsnprintf(fmt_node->val.str, count, args);
             break;
         }
 

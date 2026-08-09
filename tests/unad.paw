@@ -2,4 +2,5 @@ const int x = 10;
 const char y = 'h';
 
 
-printf(y);
+print y;
+printf("x = %d, y = %c\n", x, y);
