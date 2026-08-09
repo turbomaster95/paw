@@ -218,6 +218,21 @@ void parse_constvar_decl(nu_ast_node_t* root) {
     expect(';', "Expected ';' after declaration");
 }
 
+void parse_printf_stmt(nu_ast_node_t* parent) {
+    expect(PRINTF, "Expected 'printf'");
+    
+    bool has_paren = match('(');
+    if (has_paren) advance();
+
+    nu_ast_node_t* print_node = newnode(parent, AST_PRINTF_STMT);
+    parse_expression(print_node);
+
+    if (has_paren) {
+        expect(')', "Expected ')' after printf expression");
+    }
+    expect(';', "Expected ';' after printf statement");
+}
+
 void parse_block(nu_ast_node_t* parent);
 
 void parse_function_decl(nu_ast_node_t* root) {
@@ -261,9 +276,13 @@ static void parse_statement(nu_ast_node_t* root) {
         case CONST:
             parse_constvar_decl(root);
             break;
+
+        case PRINTF:
+            parse_printf_stmt(root);
+            break;
                         
         default:
-            char errm[128];        
+            char errm[128];      
             snprintf(errm, sizeof(errm),
                  "Unexpected token '%s' (\"%s\")\n", tokname(current_tok), yytext);
             synerr(yylineno, tok_col, errm);

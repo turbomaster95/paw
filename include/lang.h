@@ -22,7 +22,8 @@
     X(AST_NEGATIVE) \
     X(AST_PARAM_LIST) \
     X(AST_PARAM) \
-    X(AST_BLOCK)
+    X(AST_BLOCK) \
+    X(AST_PRINTF_STMT)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

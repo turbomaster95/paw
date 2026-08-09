@@ -1,4 +1,5 @@
 const int x = 10;
 const char y = 'h';
 
-return y;
+
+printf(y);

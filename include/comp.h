@@ -13,7 +13,8 @@ enum TokenTypes {
     RETURN,
     INT,
     CHAR,
-    CONST
+    CONST,
+    PRINTF
 };
 
 typedef union {
