@@ -32,20 +32,6 @@ static void emit(Instruction inst) {
     code_buf->instructions[code_buf->count++] = inst;
 }
 
-static void exec_vsnprintf(const char *fmt, int count, int *args) {
-    char buf[512];
-
-    switch (count) {
-        case 0: snprintf(buf, sizeof(buf), "%s", fmt); break;
-        case 1: snprintf(buf, sizeof(buf), fmt, args[0]); break;
-        case 2: snprintf(buf, sizeof(buf), fmt, args[0], args[1]); break;
-        case 3: snprintf(buf, sizeof(buf), fmt, args[0], args[1], args[2]); break;
-        default: snprintf(buf, sizeof(buf), fmt, args[0], args[1], args[2], args[3]); break;
-    }
-
-    printf("%s", buf);
-}
-
 static int get_node_value(nu_ast_node_t *node) {
     if (!node) return 0;
     if (node->type == AST_CONST) {
@@ -120,7 +106,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             return target_reg;
         }
 
-    	  case AST_FUNC_CALL: {
+        case AST_FUNC_CALL: {
             nu_ast_node_t *fn_node = g_root_node;
             nu_ast_node_t *target_fn = NULL;
             
@@ -148,7 +134,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *arg = node->first_child;
 
             while (param && arg) {
-                int arg_val = get_node_value(arg); // or evaluate expression
+                int arg_val = get_node_value(arg);
                 const char *param_name = param->val.str;
                 if (param_name) {
                     symb *sym = symtab_lookup(SymTable, param_name);
@@ -220,7 +206,6 @@ static void unescape(const char* in, char* out, size_t out_sz) {
     out[j] = '\0';
 }
 
-
 void compile_node(nu_ast_node_t *node) {
     if (!node) return;
 
@@ -272,7 +257,7 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
-	case AST_PRINT_STMT: {
+        case AST_PRINT_STMT: {
             nu_ast_node_t *expr = node->first_child;
             if (!expr) break;
 
@@ -300,7 +285,6 @@ void compile_node(nu_ast_node_t *node) {
                 if (val && realfmt) {
                     strcpy(val, expr->val.str);
 
-                    // Strip quote layers until none remain
                     while ((val[0] == '"' || val[0] == '\'') && strlen(val) >= 2) {
                         char tmp[512];
                         removequotes(val, tmp, sizeof(tmp));
@@ -365,19 +349,52 @@ void compile_node(nu_ast_node_t *node) {
     }
 }
 
-void walk_ast(nu_ast_node_t *node) {
+bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
+    if (!buf || !filename) return false;
+
+    FILE *f = fopen(filename, "wb");
+    if (!f) {
+        perror("Failed to open output bytecode file");
+        return false;
+    }
+
+    PawHdr hdr;
+    hdr.magic[0] = 'P';
+    hdr.magic[1] = 'A';
+    hdr.magic[2] = 'W';
+    hdr.magic[3] = 'V';
+    hdr.version = 1;
+    hdr.reserved = 0x0000;
+    hdr.inst_count = buf->count;
+
+    fwrite(&hdr, sizeof(PawHdr), 1, f);
+
+    // Write registered string resources
+    uint32_t str_count = vm_get_string_count();
+    fwrite(&str_count, sizeof(uint32_t), 1, f);
+    for (uint32_t i = 0; i < str_count; i++) {
+        const char *str = vm_get_string(i);
+        uint32_t len = (uint32_t)strlen(str);
+        fwrite(&len, sizeof(uint32_t), 1, f);
+        fwrite(str, sizeof(char), len, f);
+    }
+
+    // Write instructions stream
+    fwrite(buf->instructions, sizeof(Instruction), buf->count, f);
+
+    fclose(f);
+    return true;
+}
+
+void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
     if (!node) return;
 
-    // init the bytecode buffer
     code_buf = NULL;
-
     compile_node(node);
-
-    // append HALT to exit cleanly
     emit(HALT);
 
     if (code_buf && code_buf->count > 0) {
-        run_paw_vm(code_buf->instructions);
+        write_bytecode_file(out_filename, code_buf);
         nu_free(g_mm, code_buf->instructions);
         nu_free(g_mm, code_buf);
         code_buf = NULL;

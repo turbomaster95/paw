@@ -360,5 +360,5 @@ void parse(void) {
         parse_statement(root);
     }
     print_ast(root, 0);
-    walk_ast(root);
+    walk_ast_to_file(root, "output.pawv");
 }

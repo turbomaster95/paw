@@ -25,6 +25,17 @@ int vm_register_string(const char* s) {
     return g_str_count++;
 }
 
+uint32_t vm_get_string_count(void) {
+    return g_str_count;
+}
+
+const char* vm_get_string(uint32_t id) {
+    if (id >= g_str_count) {
+        return "";
+    }
+    return g_str_table[id];
+}
+
 void run_paw_vm(const Instruction *code) {
     int32_t R[NUM_REGS] = {0};
     size_t ip = 0;

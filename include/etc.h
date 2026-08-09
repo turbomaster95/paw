@@ -4,6 +4,6 @@
 #include <nu.h>
 
 void parse(void);
-void walk_ast(nu_ast_node_t *node);
+void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename);
 
 #endif

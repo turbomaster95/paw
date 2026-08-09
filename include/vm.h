@@ -80,6 +80,8 @@ typedef struct {
 void run_paw_vm(const Instruction *code);
 int vm_register_format(const char* s);
 int vm_register_string(const char* s);
+uint32_t vm_get_string_count(void);
+const char* vm_get_string(uint32_t id);
 
 #endif
 
