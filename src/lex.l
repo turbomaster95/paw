@@ -31,11 +31,12 @@ int errcnt = 0;
 
 %%
 "//"[^\n]*              { /* consume single line comment */ }
-"#"[^\n]*               { /* consume preprocessor / single line comment */ }
+"#"[^\n]*               { /* consume preprocessor? / single line comment */ }
 
 "func"                  { return(FUNC); }
 "if"                    { return(IF); }
 "int"                   { return(INT); }
+"char"                  { return(CHAR); }
 "const"                 { return(CONST); }
 "return"                { return(RETURN); }
 

@@ -3,14 +3,18 @@ SRC := src
 TARGET := paw
 
 CC := gcc
-CFLAGS := -Iinclude -Wall -Wextra
+CFLAGS := -Iinclude -Wall -Wextra -pedantic
 COPTS := 
 
 CFLAGS += $(COPTS)
 
 Q = @
 
+NU_BUILD_A := lib/nu/build/libnu.a
+NU_OBJ_A   := $(OBJ)/libnu.a
+
 C_SRCS   := $(wildcard $(SRC)/*.c)
+C_SRCS   += $(wildcard $(SRC)/vm/*.c)
 
 GEN_SRCS := $(OBJ)/lex.yy.c
 
@@ -21,6 +25,7 @@ all: setup $(OBJ)/libnu.a $(TARGET)
 
 setup:
 	$(Q)mkdir -p $(OBJ)
+	$(Q)mkdir -p $(OBJ)/vm
 
 $(OBJ)/lex.yy.c: $(SRC)/lex.l
 	$(Q)echo "  FLEX    $^"
@@ -38,17 +43,27 @@ $(TARGET): $(OBJS) FORCE
 	$(Q)echo "  LD      $@"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(OBJS)
 
-CLEANF += $(OBJDIR)/libnu.a
-DCLEAND += lib/libnu/build
-DCLEANF += lib/libnu/configure
-$(OBJ)/libnu.a:
-	(cd lib/nu && ./compile && cp include/nu.h ../../include && cp include/nus.h ../../include && cp build/libnu.a ../../$(OBJ))
+$(NU_OBJ_A): include/nu.h include/nus.h
+	$(Q)mkdir -p $(OBJ)
+	$(Q)if [ -f $(NU_BUILD_A) ]; then \
+		echo "  NU      $(NU_BUILD_A) -> $@"; \
+		cp $(NU_BUILD_A) $@; \
+	else \
+		echo "  NU         (missing $(NU_BUILD_A))"; \
+		(cd lib/nu && ./compile && cp build/libnu.a ../../$(NU_OBJ_A)); \
+	fi
 
-CLEANF += include/nu.h include/nus.h
-include/nu.h: $(OBJ)/libnu.a
+CLEANF += include/nu.h
+include/nu.h:
+	$(Q)(cd lib/nu && cp include/nu.h ../../include)
 
+CLEANF += include/nus.h
+include/nus.h:
+	$(Q)(cd lib/nu && cp include/nus.h ../../include)
+
+CLEANF += $(OBJS)
 clean:
-	rm -rf $(OBJ) $(TARGET)
+	rm -rf $(TARGET)
 	rm -rf $(CLEANF)
 
 FORCE:

@@ -1,5 +1,5 @@
-#ifndef TAB_H
-#define TAB_H
+#ifndef COMP_H
+#define COMP_H
 
 #include <stdint.h>
 
@@ -12,7 +12,8 @@ enum TokenTypes {
     IF,
     RETURN,
     INT,
-    CONST,
+    CHAR,
+    CONST
 };
 
 typedef union {
@@ -50,4 +51,4 @@ symb *symtab_lookup(symbt *table, const char *name);
 
 extern YYSTYPE yylval;
 
-#endif // TAB_H
+#endif // COMP_H

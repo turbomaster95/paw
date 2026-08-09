@@ -3,11 +3,13 @@
 #include <comp.h>
 #include <etc.h>
 #include <nu.h>
-#include <lang.h>
 #include <glog.h>
 #include <string.h>
 #include <nus.h>
 #include <type.h>
+
+#define NEED_TYPENAME
+#include <lang.h>
 
 extern int yylex(void);
 extern char *yytext;
@@ -182,6 +184,39 @@ void parse_integer_decl(nu_ast_node_t* root) {
     expect(';', "Expected ';' after declaration");
 }
 
+static int is_type_token(int token) {
+    return token == INT || token == CHAR;
+}
+
+void parse_constvar_decl(nu_ast_node_t* root) {
+    expect(CONST, "Expected 'const'");
+
+    if (!is_type_token(current_tok)) {
+        synerr(yylineno, tok_col, "Expected type after 'const'");
+    }
+
+    var_type_t var_type = (current_tok == CHAR) ? VAR_STRING /* or VAR_CHAR */ : VAR_INT;
+    advance();
+    
+    nu_ast_node_t* const_node = newnode(root, AST_CONST_DECL);
+
+    if (!match(IDENTIFIER)) {
+        synerr(yylineno, tok_col, "Expected an identifier for the constant!");
+    }
+
+    char* varname = nu_strdup(yytext);
+    newstrnode(const_node, AST_VAR_DECL, yytext);
+    advance();
+
+    symtab_add(SymTable, varname, var_type);
+    
+    if (match('=')) {
+        advance();
+        parse_expression(const_node);
+    }
+
+    expect(';', "Expected ';' after declaration");
+}
 
 void parse_block(nu_ast_node_t* parent);
 
@@ -221,6 +256,10 @@ static void parse_statement(nu_ast_node_t* root) {
 
         case FUNC:
             parse_function_decl(root);
+            break;
+
+        case CONST:
+            parse_constvar_decl(root);
             break;
                         
         default:

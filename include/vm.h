@@ -5,79 +5,77 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define STACK_MAX 256
-#define FRAMES_MAX 64
+#define NUM_REGS 16
 
-typedef int Value;
-
-typedef enum {
-    INTERPRET_OK,
-    INTERPRET_COMPILE_ERROR,
-    INTERPRET_RUNTIME_ERROR
-} InterpretResult;
-
-typedef enum {
-    OP_CONSTANT,      /* Pushes constant onto stack */
-    OP_ADD,           /* Pops b, pops a, pushes (a + b) */
-    OP_SUB,           /* Pops b, pops a, pushes (a - b) */
-    OP_MUL,           /* Pops b, pops a, pushes (a * b) */
-    OP_DIV,           /* Pops b, pops a, pushes (a / b) */
-    OP_NEGATE,        /* Pops a, pushes (-a) */
-
-    OP_EQUAL,         /* Pops b, pops a, pushes (a == b) */
-    OP_GREATER,       /* Pops b, pops a, pushes (a > b) */
-    OP_LESS,          /* Pops b, pops a, pushes (a < b) */
-
-    OP_POP,           /* Discards top of stack */
-    OP_GET_LOCAL,     /* [OP_GET_LOCAL, slot_idx] -> Pushes frame->slots[slot_idx] */
-    OP_SET_LOCAL,     /* [OP_SET_LOCAL, slot_idx] -> Assigns top of stack to frame->slots[slot_idx] */
-
-    OP_JUMP,          /* [OP_JUMP, hi, lo] -> Jumps forward */
-    OP_JUMP_IF_FALSE, /* [OP_JUMP_IF_FALSE, hi, lo] -> Jumps forward if top is 0/false */
-    OP_LOOP,          /* [OP_LOOP, hi, lo] -> Jumps backward */
-
-    OP_CALL,          /* [OP_CALL, arg_count] -> Executes function call frame */
-    OP_RETURN,        /* Returns from current call frame */
-    OP_HALT           /* Halts virtual machine */
-} OpCode;
+#define R0  0
+#define R1  1
+#define R2  2
+#define R3  3
+#define R4  4
+#define R5  5
+#define R6  6
+#define R7  7
+#define R8  8
+#define R9  9
+#define R10 10
+#define R11 11
+#define R12 12
+#define R13 13
+#define R14 14
+#define R15 15
 
 typedef struct {
-    uint8_t *code;
+  char magic[4];
+  uint16_t version;
+  uint16_t reserved; // MUST be 0x0000 always
+  uint64_t inst_count;
+} PawHdr;
+
+typedef enum {
+    OP_LOAD,
+    OP_MOV,
+    OP_ADD,
+    OP_SUB,
+    OP_MUL,
+    OP_DIV,
+    OP_JMP,
+    OP_JMPEQ,
+    OP_JMPLT,
+    OP_PRINT,
+    OP_HALT
+} Opcode;
+
+typedef uint64_t Instruction;
+
+typedef struct {
+    Instruction *instructions;
     size_t count;
     size_t capacity;
+} BytecodeBuffer;
 
-    Value *constants;
-    size_t const_count;
-    size_t const_capacity;
-} Chunk;
+#define ENCODE_I(op, r1, imm)        (((uint64_t)(op) << 56) | ((uint64_t)(r1) << 48) | ((uint64_t)(uint32_t)(imm)))
+#define ENCODE_R(op, r1, r2, r3)     (((uint64_t)(op) << 56) | ((uint64_t)(r1) << 48) | ((uint64_t)(r2) << 40) | ((uint64_t)(r3) << 32))
+#define ENCODE_J(op, r1, r2, imm)    (((uint64_t)(op) << 56) | ((uint64_t)(r1) << 48) | ((uint64_t)(r2) << 40) | ((uint64_t)(uint32_t)(imm)))
 
-typedef struct {
-    Chunk *chunk;
-    uint8_t *ip;
-    Value *slots;
-} CallFrame;
+#define LOAD(reg, val)       ENCODE_I(OP_LOAD, reg, val)
+#define MOV(dst, src)        ENCODE_R(OP_MOV, dst, src, 0)
+#define ADD(dst, r1, r2)     ENCODE_R(OP_ADD, dst, r1, r2)
+#define SUB(dst, r1, r2)     ENCODE_R(OP_SUB, dst, r1, r2)
+#define MUL(dst, r1, r2)     ENCODE_R(OP_MUL, dst, r1, r2)
+#define DIV(dst, r1, r2)     ENCODE_R(OP_DIV, dst, r1, r2)
+#define JMP(addr)            ENCODE_I(OP_JMP, 0, addr)
+#define JMPEQ(r1, r2, addr)  ENCODE_J(OP_JMPEQ, r1, r2, addr)
+#define JMPLT(r1, r2, addr)  ENCODE_J(OP_JMPLT, r1, r2, addr)
+#define PRINT(reg)           ENCODE_I(OP_PRINT, reg, 0)
+#define HALT                 ENCODE_I(OP_HALT, 0, 0)
 
-typedef struct {
-    CallFrame frames[FRAMES_MAX];
-    int frame_count;
+#define GET_OP(inst)   ((uint8_t)(((inst) >> 56) & 0xFF))
+#define GET_R1(inst)   ((uint8_t)(((inst) >> 48) & 0xFF))
+#define GET_R2(inst)   ((uint8_t)(((inst) >> 40) & 0xFF))
+#define GET_R3(inst)   ((uint8_t)(((inst) >> 32) & 0xFF))
+#define GET_IMM(inst)  ((int32_t)((inst) & 0xFFFFFFFF))
 
-    Value stack[STACK_MAX];
-    Value *stack_top;
-} VM;
-
-void chunk_init(Chunk *chunk);
-void chunk_free(Chunk *chunk);
-void chunk_write(Chunk *chunk, uint8_t byte);
-int chunk_add_constant(Chunk *chunk, Value value);
-
-void vm_init(VM *vm);
-void vm_free(VM *vm);
-void vm_push(VM *vm, Value value);
-Value vm_pop(VM *vm);
-InterpretResult vm_run(VM *vm, Chunk *main_chunk);
-
-void disassemble_chunk(Chunk *chunk, const char *name);
-int disassemble_instruction(Chunk *chunk, int offset);
+void run_paw_vm(const Instruction *code);
 
 #endif
 

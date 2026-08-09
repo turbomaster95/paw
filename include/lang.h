@@ -12,6 +12,7 @@
     X(AST_ASSIGN_STMT) \
     X(AST_INT_DECL) \
     X(AST_VAR_DECL) \
+    X(AST_CONST_DECL) \
     X(AST_ADD) \
     X(AST_SUB) \
     X(AST_MUL) \
@@ -30,6 +31,8 @@ typedef enum {
     AST_TYPE_COUNT
 } ast_type_t;
 
+#ifdef NEED_TYPENAME
+
 static const char *AST_TYPE_NAMES[] = {
 #define DEFINE_STRING(name) #name,
     AST_TYPE_LIST(DEFINE_STRING)
@@ -42,5 +45,7 @@ static const char *ast_type_name(uint32_t type) {
     }
     return "AST_UNKNOWN";
 }
+
+#endif // NEED_TYPENAME
 
 #endif
