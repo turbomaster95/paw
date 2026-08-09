@@ -1,6 +1,6 @@
 const int x = 10;
 const char y = 'h';
+print(y);
 
-
-print y;
+print("hello");
 printf("x = %d, y = %c\n", x, y);

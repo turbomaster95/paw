@@ -2,6 +2,28 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <vm.h>
+#include <string.h>
+#include <nu.h>
+
+#define MAX_STRINGS 1024
+
+static const char* g_fmt_table[MAX_STRINGS];
+static int g_fmt_count = 0;
+
+static const char* g_str_table[MAX_STRINGS];
+static int g_str_count = 0;
+
+int vm_register_format(const char* s) {
+    if (g_fmt_count >= MAX_STRINGS) return -1;
+    g_fmt_table[g_fmt_count] = s;
+    return g_fmt_count++;
+}
+
+int vm_register_string(const char* s) {
+    if (g_str_count >= MAX_STRINGS) return -1;
+    g_str_table[g_str_count] = s;
+    return g_str_count++;
+}
 
 void run_paw_vm(const Instruction *code) {
     int32_t R[NUM_REGS] = {0};
@@ -45,9 +67,30 @@ void run_paw_vm(const Instruction *code) {
             case OP_JMPLT:
                 if (R[r1] < R[r2]) ip = imm;
                 break;
-            case OP_PRINT:
-                printf("%d\n", R[r1]);
+            case OP_PRINT: {
+		int str_id = R[r1];
+		const char* str = g_str_table[str_id];
+                printf("%s\n", str);
                 break;
+	    }
+            case OP_PRINTF: {
+		int reg = r1;
+		int count = r2;
+		int fmt_id = r3;
+
+		const char* fmt = g_fmt_table[fmt_id];
+		char buf[4096];
+
+	        switch (count) {
+		        case 0: snprintf(buf, sizeof(buf), "%s", fmt); break;
+		        case 1: snprintf(buf, sizeof(buf), fmt, R[reg+0]); break;
+		        case 2: snprintf(buf, sizeof(buf), fmt, R[reg+0], R[reg+1]); break;
+		        case 3: snprintf(buf, sizeof(buf), fmt, R[reg+0], R[reg+1], R[reg+2]); break;
+		        default: snprintf(buf, sizeof(buf), fmt, R[reg+0], R[reg+1], R[reg+2], R[reg+3]); break;
+	        }
+	        printf("%s", buf);
+	        break;
+	    }
             case OP_HALT:
                 return;
             default:

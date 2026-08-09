@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     }
 
     g_ast = nu_ast_create(g_mm);
-
+    
     glog_init();
     glog_config.show_source = true;
     glog_config.use_color = 1;

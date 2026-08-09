@@ -74,13 +74,13 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
     if (!node) return target_reg;
 
     switch (node->type) {
-	case AST_CONST: {
+        case AST_CONST: {
             int val = get_node_value(node);
             emit(LOAD(target_reg, val));
             return target_reg;
         }
 
-	case AST_IDENT: {
+        case AST_IDENT: {
             symb *sym = symtab_lookup(SymTable, node->val.str);
             if (sym) {
                 emit(LOAD(target_reg, sym->val));
@@ -89,8 +89,8 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             }
             return target_reg;
         }
-
-	case AST_ADD: {
+        
+        case AST_ADD: {
             nu_ast_node_t *left = node->first_child;
             nu_ast_node_t *right = left ? left->next_sibling : NULL;
 
@@ -120,7 +120,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             return target_reg;
         }
 
-	case AST_FUNC_CALL: {
+    	  case AST_FUNC_CALL: {
             nu_ast_node_t *fn_node = g_root_node;
             nu_ast_node_t *target_fn = NULL;
             
@@ -177,6 +177,50 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
     }
 }
 
+void removequotes(const char* in, char* out, size_t out_size) {
+    if (!out || out_size == 0) return;
+
+    if (!in) { 
+        out[0] = '\0';
+        return;
+    }
+
+    size_t len = strlen(in);
+    if (len >= 2) {
+        char first = in[0];
+        char last  = in[len - 1];
+
+        if ((first == '\'' && last == '\'') || (first == '"' && last == '"')) {
+            size_t inner = len - 2;
+            if (inner >= out_size) inner = out_size - 1;
+
+            memcpy(out, in + 1, inner);
+            out[inner] = '\0';
+            return;
+        }
+    }
+
+    strncpy(out, in, out_size - 1);
+    out[out_size - 1] = '\0';
+}
+
+static void unescape(const char* in, char* out, size_t out_sz) {
+    size_t j = 0;
+    for (size_t i = 0; in[i] != '\0' && j + 1 < out_sz; i++) {
+        if (in[i] == '\\') {
+            char n = in[i + 1];
+            if (n == 'n') { out[j++] = '\n'; i++; continue; }
+            if (n == '\\') { out[j++] = '\\'; i++; continue; }
+            out[j++] = n;
+            i++;
+            continue;
+        }
+        out[j++] = in[i];
+    }
+    out[j] = '\0';
+}
+
+
 void compile_node(nu_ast_node_t *node) {
     if (!node) return;
 
@@ -188,7 +232,7 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
-	case AST_FUNC_DECL: {
+        case AST_FUNC_DECL: {
             if (node->val.str && strcmp(node->val.str, "main") == 0) {
                 for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
                     compile_node(child);
@@ -197,7 +241,7 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
-	case AST_PRINTF_STMT: {
+        case AST_PRINTF_STMT: {
             nu_ast_node_t *fmt_node = node->first_child;
             if (!fmt_node) break;
 
@@ -208,20 +252,75 @@ void compile_node(nu_ast_node_t *node) {
                 args[count++] = get_node_value(arg);
                 arg = arg->next_sibling;
             }
-            exec_vsnprintf(fmt_node->val.str, count, args);
+
+            size_t in_len = strlen(fmt_node->val.str);
+            char *val = nu_alloc(g_mm, in_len + 1);
+            if (!val) break;
+            
+            removequotes(fmt_node->val.str, val, in_len + 1);
+            
+            char *realfmt = nu_alloc(g_mm, in_len + 1);
+            if (!realfmt) { nu_free(g_mm, val); break; }
+            
+            unescape(val, realfmt, in_len + 1);
+            int fmt_id = vm_register_format(realfmt);
+            int reg_base = 1;
+            for (int i = 0; i < count; i++) {
+                emit(LOAD(reg_base + i, args[i]));
+            }
+            emit(PRINTF(reg_base, count, fmt_id));
             break;
         }
 
 	case AST_PRINT_STMT: {
-	    nu_ast_node_t *expr = node->first_child;
-	    if (expr) {
-	        compile_expr(expr, R0);
-	        emit(PRINT(R0));
-	    }
-	    break;
-	}
+            nu_ast_node_t *expr = node->first_child;
+            if (!expr) break;
 
-	case AST_INT_DECL:
+            if (expr->type == AST_IDENT) {
+                symb *sym = symtab_lookup(SymTable, expr->val.str);
+                int val = sym ? sym->val : 0;
+
+                char *str_buf = nu_alloc(g_mm, 32);
+                if (!str_buf) break;
+
+                if (val >= 32 && val <= 126) {
+                    snprintf(str_buf, 32, "%c", val);
+                } else {
+                    snprintf(str_buf, 32, "%d", val);
+                }
+
+                int str_id = vm_register_string(str_buf);
+                emit(LOAD(R0, str_id));
+                emit(PRINT(R0));
+            } else if (expr->type == AST_CONST && expr->val.str) {
+                size_t orig_len = strlen(expr->val.str);
+                char *val = nu_alloc(g_mm, orig_len + 1);
+                char *realfmt = nu_alloc(g_mm, orig_len + 1);
+
+                if (val && realfmt) {
+                    strcpy(val, expr->val.str);
+
+                    // Strip quote layers until none remain
+                    while ((val[0] == '"' || val[0] == '\'') && strlen(val) >= 2) {
+                        char tmp[512];
+                        removequotes(val, tmp, sizeof(tmp));
+                        if (strcmp(val, tmp) == 0) break;
+                        strcpy(val, tmp);
+                    }
+
+                    unescape(val, realfmt, orig_len + 1);
+
+                    int str_id = vm_register_string(realfmt);
+                    emit(LOAD(R0, str_id));
+                    emit(PRINT(R0));
+                }
+
+                if (val) nu_free(g_mm, val);
+            }
+            break;
+        }
+
+        case AST_INT_DECL:
         case AST_CONST_DECL: {
             nu_ast_node_t *var_node = node->first_child;
             nu_ast_node_t *val_node = var_node ? var_node->next_sibling : NULL;

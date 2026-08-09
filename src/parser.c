@@ -220,8 +220,18 @@ void parse_constvar_decl(nu_ast_node_t* root) {
 
 void parse_print_stmt(nu_ast_node_t* parent) {
     expect(PRINT, "Expected 'print'");
-    nu_ast_node_t* print_node = newnode(parent, AST_PRINT_STMT);
-    parse_expression(print_node);
+    expect('(', "Expected '(' after 'print'");
+
+    if (match(STRING_LITERAL)) {
+       nu_ast_node_t* print_node = newnode(parent, AST_PRINT_STMT);
+       newstrnode(print_node, AST_CONST, yytext);
+       advance();
+    } else {
+       nu_ast_node_t* print_node = newnode(parent, AST_PRINT_STMT);
+       parse_expression(print_node);
+    }
+
+    expect(')', "Expected ')' after 'print' statement");
     expect(';', "Expected ';' after print statement");
 }
 

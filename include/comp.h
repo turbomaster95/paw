@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define MAX_BUFFER_SIZE 8192
+
 enum TokenTypes {
     TOKEN_EOF = 0,
     IDENTIFIER,
