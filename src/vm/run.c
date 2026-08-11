@@ -81,6 +81,9 @@ int32_t run_bytecode(const char *filename) {
     fclose(f);
 
     int32_t ret = run_paw_vm(code);
+    if (!ret) {
+	ret = -1;
+    }
 
     nu_free(g_mm, code);
     return ret;

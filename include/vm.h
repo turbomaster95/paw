@@ -43,6 +43,8 @@ typedef enum {
     OP_JMPLT,
     OP_PRINT,
     OP_PRINTF,
+    OP_CALL,
+    OP_RET,
     OP_HALT
 } Opcode;
 
@@ -53,6 +55,13 @@ typedef struct {
     size_t count;
     size_t capacity;
 } BytecodeBuffer;
+#define MAX_CALL_DEPTH 256
+
+typedef struct {
+    size_t return_ip;
+    uint8_t dest_reg;       // caller's register to store ret val
+    int32_t saved_regs[16]; // backup frame ptr
+} CallFrame;
 
 #define ENCODE_I(op, r1, imm)        (((uint64_t)(op) << 56) | ((uint64_t)(r1) << 48) | ((uint64_t)(uint32_t)(imm)))
 #define ENCODE_R(op, r1, r2, r3)     (((uint64_t)(op) << 56) | ((uint64_t)(r1) << 48) | ((uint64_t)(r2) << 40) | ((uint64_t)(r3) << 32))

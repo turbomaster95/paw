@@ -20,6 +20,8 @@ static BytecodeBuffer *code_buf = NULL;
 int eval_expr(nu_ast_node_t *node);
 void compile_node(nu_ast_node_t *node);
 int compile_expr(nu_ast_node_t *node, int target_reg);
+void removequotes(const char* in, char* out, size_t out_size);
+void unescape(const char* in, char* out, size_t out_sz);
 
 static void emit(Instruction inst) {
     if (!code_buf) {
@@ -39,6 +41,7 @@ static int get_node_value(nu_ast_node_t *node) {
     if (!node) return 0;
     if (node->type == AST_CONST) {
         if (!node->val.str) return 0;
+
         if (node->val.str[0] == '\'') {
             if (node->val.str[1] == '\\') {
                 switch (node->val.str[2]) {
@@ -50,8 +53,32 @@ static int get_node_value(nu_ast_node_t *node) {
             }
             return (unsigned char)node->val.str[1];
         }
+
+        if (node->val.str[0] == '"') {
+            size_t orig_len = strlen(node->val.str);
+            char *val = nu_alloc(g_mm, orig_len + 1);
+            char *realstr = nu_alloc(g_mm, orig_len + 1);
+            int str_id = 0;
+
+            if (val && realstr) {
+                strcpy(val, node->val.str);
+                while ((val[0] == '"' || val[0] == '\'') && strlen(val) >= 2) {
+                    char tmp[512];
+                    removequotes(val, tmp, sizeof(tmp));
+                    if (strcmp(val, tmp) == 0) break;
+                    strcpy(val, tmp);
+                }
+                unescape(val, realstr, orig_len + 1);
+                str_id = vm_register_string(realstr);
+            }
+
+            if (val) nu_free(g_mm, val);
+            return str_id;
+        }
+
         return atoi(node->val.str);
     }
+
     if (node->type == AST_IDENT) {
         symb *sym = symtab_lookup(SymTable, node->val.str);
         return sym ? sym->val : 0;
@@ -193,21 +220,39 @@ void removequotes(const char* in, char* out, size_t out_size) {
     out[out_size - 1] = '\0';
 }
 
-static void unescape(const char* in, char* out, size_t out_sz) {
+void unescape(const char* in, char* out, size_t out_sz) {
     size_t j = 0;
     for (size_t i = 0; in[i] != '\0' && j + 1 < out_sz; i++) {
         if (in[i] == '\\') {
             char n = in[i + 1];
-            if (n == 'n') { out[j++] = '\n'; i++; continue; }
-            if (n == '\\') { out[j++] = '\\'; i++; continue; }
-            out[j++] = n;
-            i++;
-            continue;
+            if (n == '\0') {
+                break;
+            }
+            switch (n) {
+                case 'n':  out[j++] = '\n'; i++; break;
+                case 't':  out[j++] = '\t'; i++; break;
+                case 'r':  out[j++] = '\r'; i++; break;
+                case '0':  out[j++] = '\0'; i++; break;
+                case 'a':  out[j++] = '\a'; i++; break;
+                case 'b':  out[j++] = '\b'; i++; break;
+                case 'f':  out[j++] = '\f'; i++; break;
+                case 'v':  out[j++] = '\v'; i++; break;
+                case '\\': out[j++] = '\\'; i++; break;
+                case '"':  out[j++] = '"';  break;
+                case '\'': out[j++] = '\''; break;
+                default:
+                    // unknown escape sequence, keep the char
+                    out[j++] = n;
+                    i++;
+                    break;
+            }
+        } else {
+            out[j++] = in[i];
         }
-        out[j++] = in[i];
     }
     out[j] = '\0';
 }
+
 
 void compile_node(nu_ast_node_t *node) {
     if (!node) return;
@@ -226,6 +271,11 @@ void compile_node(nu_ast_node_t *node) {
                     compile_node(child);
                 }
             }
+            break;
+        }
+
+        case AST_FUNC_CALL: {
+            compile_expr(node, R0);
             break;
         }
 
@@ -339,7 +389,6 @@ void compile_node(nu_ast_node_t *node) {
             nu_ast_node_t *val_node = node->first_child;
             if (val_node) {
                 compile_expr(val_node, R0);
-                emit(HALT(R0));
             }
             break;
         }
@@ -392,8 +441,26 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
 void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
     if (!node) return;
 
+    g_root_node = node;
     code_buf = NULL;
-    compile_node(node);
+
+    // Locate and compile main entry point
+    nu_ast_node_t *main_fn = NULL;
+    for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+        if (child->type == AST_FUNC_DECL && child->val.str && strcmp(child->val.str, "main") == 0) {
+            main_fn = child;
+            break;
+        }
+    }
+
+    if (main_fn) {
+        for (nu_ast_node_t *child = main_fn->first_child; child != NULL; child = child->next_sibling) {
+            compile_node(child);
+        }
+    } else {
+        compile_node(node);
+    }
+
     emit(HALT(R0));
 
     if (code_buf && code_buf->count > 0) {
@@ -403,3 +470,4 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
         code_buf = NULL;
     }
 }
+

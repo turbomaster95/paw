@@ -99,6 +99,12 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
         return node;
     }
 
+    if (match(STRING_LITERAL)) {
+        nu_ast_node_t* node = newstrnode(parent, AST_CONST, yytext);
+        advance();
+        return node;
+    }
+
     if (match(IDENTIFIER)) {
         char name[64];
         snprintf(name, sizeof(name), "%s", yytext);
@@ -307,6 +313,12 @@ static void parse_statement(nu_ast_node_t* root) {
         case PRINT:
             parse_print_stmt(root);
             break;
+
+	case IDENTIFIER: {
+            parse_expression(root);
+            expect(';', "Expected ';' after statement");
+            break;
+        }
 
         default: {
             char errm[128];

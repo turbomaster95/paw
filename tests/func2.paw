@@ -1,0 +1,9 @@
+func add(a) {
+    printf("hello: %s\n", a);
+    return 0;
+}
+
+func main() {
+    add("john doe");
+    return 42;
+}
