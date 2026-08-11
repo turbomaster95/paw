@@ -15,6 +15,8 @@ extern nu_ast_node_t *g_root_node;
 extern nu_mm_t* g_mm;
 
 static BytecodeBuffer *code_buf = NULL;
+static bool in_function = false;
+static int current_local_reg = 4;
 
 // Forward decl's
 int eval_expr(nu_ast_node_t *node);
@@ -81,8 +83,11 @@ static int get_node_value(nu_ast_node_t *node) {
 
     if (node->type == AST_IDENT) {
         symb *sym = symtab_lookup(SymTable, node->val.str);
-        return sym ? sym->val : 0;
+        if (sym && sym->scope == SCOPE_GLOBAL) {
+            return sym->val;
+        }
     }
+
     return 0;
 }
 
@@ -98,10 +103,16 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
 
         case AST_IDENT: {
             symb *sym = symtab_lookup(SymTable, node->val.str);
-            if (sym) {
+            if (!sym) {
+                fprintf(stderr, "Error: Undefined variable '%s'\n", node->val.str);
+                emit(LOAD(target_reg, 0));
+                return target_reg;
+            }
+
+            if (sym->scope == SCOPE_GLOBAL) {
                 emit(LOAD(target_reg, sym->val));
             } else {
-                emit(LOAD(target_reg, 0));
+                emit(MOV(target_reg, sym->location));
             }
             return target_reg;
         }
@@ -267,9 +278,36 @@ void compile_node(nu_ast_node_t *node) {
 
         case AST_FUNC_DECL: {
             if (node->val.str && strcmp(node->val.str, "main") == 0) {
+                in_function = true;
+                current_local_reg = 4;
+
+                nu_ast_node_t *param_list = NULL;
+                for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+                    if (child->type == AST_PARAM_LIST) param_list = child;
+                }
+
+                int param_idx = 0;
+                if (param_list) {
+                    for (nu_ast_node_t *p = param_list->first_child; p != NULL; p = p->next_sibling) {
+                        if (p->val.str) {
+                            symb *sym = symtab_lookup(SymTable, p->val.str);
+                            if (!sym) {
+                                symtab_add(SymTable, p->val.str, VAR_INT);
+                                sym = symtab_lookup(SymTable, p->val.str);
+                            }
+                            sym->scope = SCOPE_LOCAL;
+                            sym->location = param_idx++;
+                        }
+                    }
+                }
+                if (param_idx > current_local_reg) {
+                    current_local_reg = param_idx;
+                }
+
                 for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
                     compile_node(child);
                 }
+                in_function = false;
             }
             break;
         }
@@ -363,16 +401,29 @@ void compile_node(nu_ast_node_t *node) {
             nu_ast_node_t *val_node = var_node ? var_node->next_sibling : NULL;
             const char *var_name = (var_node && var_node->val.str) ? var_node->val.str : "?";
 
-            if (val_node) {
-                int val = get_node_value(val_node);
+            symb *sym = symtab_lookup(SymTable, var_name);
+            if (!sym) {
+                symtab_add(SymTable, var_name, VAR_INT);
+                sym = symtab_lookup(SymTable, var_name);
+            }
 
-                symb *sym = symtab_lookup(SymTable, var_name);
-                if (!sym) {
-                    symtab_add(SymTable, var_name, VAR_INT);
-                    sym = symtab_lookup(SymTable, var_name);
+            if (in_function) {
+                sym->scope = SCOPE_LOCAL;
+                if (current_local_reg >= NUM_REGS) {
+                    fprintf(stderr, "Error: Out of local registers\n");
+                    exit(1);
                 }
-                if (sym) {
-                    sym->val = val;
+                sym->location = current_local_reg++;
+
+                if (val_node) {
+                    compile_expr(val_node, sym->location);
+                } else {
+                    emit(LOAD(sym->location, 0));
+                }
+            } else {
+                sym->scope = SCOPE_GLOBAL;
+                if (val_node) {
+                    sym->val = get_node_value(val_node);
                 }
             }
             break;
@@ -443,8 +494,8 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
 
     g_root_node = node;
     code_buf = NULL;
+    in_function = false;
 
-    // Locate and compile main entry point
     nu_ast_node_t *main_fn = NULL;
     for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
         if (child->type == AST_FUNC_DECL && child->val.str && strcmp(child->val.str, "main") == 0) {

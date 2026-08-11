@@ -33,11 +33,17 @@ typedef enum {
     VAR_STRING,
 } var_type_t;
 
+typedef enum {
+    SCOPE_GLOBAL,
+    SCOPE_LOCAL
+} VarScope;
+
 struct Symb {
     char *name;
     var_type_t type;
+    VarScope scope;
+    int location;
     int val;
-    int scope; /* local or global, in future tho.. */
     struct Symb *next;
 };
 

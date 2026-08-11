@@ -1,0 +1,29 @@
+const int GLOBAL_OFFSET = 10;
+int global_counter = 0;
+
+func compute_sum(a, b) {
+    int sub_res = b - 5;
+    int total = a + sub_res + GLOBAL_OFFSET;
+    return total;
+}
+
+func main() {
+    print("=== Paw Language Comprehensive Test ===");
+    
+    int x = 15;
+    int y = 25;
+    
+    int calculated = compute_sum(x, y);
+    
+    print("Calculated value is: ");
+    print(calculated);
+    
+    printf("Formatted output -> x: %d, y: %d, sum: %d\n", x, y, calculated);
+    
+    int test_char = 'Z';
+    print("Character test: ");
+    print(test_char);
+    
+    return 42;
+}
+
