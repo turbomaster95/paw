@@ -7,6 +7,9 @@
 #include <nu.h>
 #include <vm.h>
 
+#define NEED_BASENAME
+#include <common.h>
+
 nu_mm_t *g_mm = NULL;
 
 char backing[1024 * 1024 * 8]; // 8 mb
@@ -16,12 +19,10 @@ int32_t run_bytecode(const char *filename);
 
 int main(int argc, char **argv) {
     glog_init();
-    glog_config.show_source = true;
     glog_config.use_color = 1;
-    glog_config.prefix = "paw";
 
     if (argc < 2) {
-        glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s <bytecode.pawv>\n", argv[0]);
+        glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s <bytecode.pawv>\n", get_basename(argv[0]));
         goto fail;
     }
 

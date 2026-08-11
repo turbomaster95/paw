@@ -7,6 +7,11 @@
 #include <nu.h>
 #include <glog.h>
 
+#define NEED_BASENAME
+#include <common.h>
+
+#include "prep.c"
+
 extern int yylex(void);
 extern FILE *yyin;
 
@@ -26,7 +31,7 @@ int main(int argc, char **argv) {
     glog_config.prefix = "paw";
 
     if (argc < 2) {
-        glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s <source_file>\n", argv[0]);
+        glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s [options] <source_file>\n", get_basename(argv[0]));
         return EXIT_FAILURE;
     }
 
@@ -36,17 +41,56 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    init_predefined();
+
+    const char *source_file = NULL;
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "-I", 2) == 0) {
+            const char *path = argv[i] + 2;
+            if (*path) {
+                include_paths[num_include_paths++] = path;
+            } else if (i + 1 < argc) {
+                include_paths[num_include_paths++] = argv[++i];
+            }
+        } else if (strncmp(argv[i], "-D", 2) == 0) {
+            const char *def = argv[i] + 2;
+            if (*def) {
+                handle_cmdline_define(def);
+            } else if (i + 1 < argc) {
+                handle_cmdline_define(argv[++i]);
+            }
+        } else if (argv[i][0] != '-') {
+            source_file = argv[i];
+        } else {
+            fprintf(stderr, "paw: unknown option: %s\n", argv[i]);
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (!source_file) {
+        glog_log(NULL, 0, 0, GLOG_FATAL, "No input source file specified.");
+        return EXIT_FAILURE;
+    }
+
+    current_filename = strdup(source_file);
+
     g_ast = nu_ast_create(g_mm);
-    
-    current_filename = argv[1];
-    yyin = fopen(current_filename, "r");
+
+    // run prep
+    Output output;
+    out_init(&output);
+    process_file(current_filename, &output);
+
+    yyin = fmemopen(output.lines.data, output.lines.len, "r");
     if (!yyin) {
-        glog_log(current_filename, 0, 0, GLOG_FATAL, "Error opening file!");
+        glog_log(current_filename, 0, 0, GLOG_FATAL, "Failed to open preprocessor memory stream.");
+        out_free(&output);
         goto fail;
     }
 
     parse();
     fclose(yyin);
+    out_free(&output);
 
     if (!g_ast || !g_ast->root) {
         glog_log(current_filename, 0, 0, GLOG_FATAL, "Parsing failed.");
@@ -63,3 +107,4 @@ fail:
     if (g_mm)  nu_mm_destroy(g_mm);
     return EXIT_FAILURE;
 }
+

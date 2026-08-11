@@ -47,4 +47,17 @@ const char* vm_get_string(uint32_t id) {
 
 #endif
 
+#ifndef NEED_BASENAME
+
+const char *get_basename(const char *path);
+
+#else
+
+const char *get_basename(const char *path) {
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
+}
+
+#endif
+
 #endif

@@ -1,0 +1,13 @@
+
+#ifdef HELLO
+
+func add(a, b) {
+	return a + b;
+}
+
+func main() {
+	int ret = add(10, 10);
+	return ret;
+}
+
+#endif

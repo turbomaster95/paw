@@ -4,7 +4,7 @@ TARGETC := pawc
 TARGETV := pawv
 
 CC := gcc
-CFLAGS := -Iinclude -Wall -Wextra -pedantic
+CFLAGS := -Iinclude -Wall -Wextra -pedantic -Wno-unused
 COPTS := 
 
 CFLAGS += $(COPTS)
@@ -14,7 +14,9 @@ Q = @
 NU_BUILD_A := lib/nu/build/libnu.a
 NU_OBJ_A   := $(OBJ)/libnu.a
 
-C_SRCS   := $(wildcard $(SRC)/*.c)
+EXCLUDE  := $(SRC)/prep.c
+C_SRCS   := $(filter-out $(EXCLUDE), $(wildcard $(SRC)/*.c))
+
 VM_SRCS  := $(wildcard $(SRC)/vm/*.c)
 
 GEN_SRCS := $(OBJ)/lex.yy.c

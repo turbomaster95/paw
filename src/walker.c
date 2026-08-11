@@ -122,8 +122,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *right = left ? left->next_sibling : NULL;
 
             int r_left = target_reg;
-            int r_right = target_reg + 1;
-            if (r_right >= NUM_REGS) r_right = NUM_REGS - 1;
+            int r_right = (target_reg + 1 < NUM_REGS) ? target_reg + 1 : NUM_REGS - 1;
 
             compile_expr(left, r_left);
             compile_expr(right, r_right);
@@ -137,8 +136,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *right = left ? left->next_sibling : NULL;
 
             int r_left = target_reg;
-            int r_right = target_reg + 1;
-            if (r_right >= NUM_REGS) r_right = NUM_REGS - 1;
+            int r_right = (target_reg + 1 < NUM_REGS) ? target_reg + 1 : NUM_REGS - 1;
 
             compile_expr(left, r_left);
             compile_expr(right, r_right);
@@ -148,10 +146,9 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
         }
 
         case AST_FUNC_CALL: {
-            nu_ast_node_t *fn_node = g_root_node;
             nu_ast_node_t *target_fn = NULL;
             
-            for (nu_ast_node_t *child = fn_node->first_child; child != NULL; child = child->next_sibling) {
+            for (nu_ast_node_t *child = g_root_node->first_child; child != NULL; child = child->next_sibling) {
                 if (child->type == AST_FUNC_DECL && child->val.str && strcmp(child->val.str, node->val.str) == 0) {
                     target_fn = child;
                     break;
@@ -175,7 +172,6 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *arg = node->first_child;
 
             while (param && arg) {
-                int arg_val = get_node_value(arg);
                 const char *param_name = param->val.str;
                 if (param_name) {
                     symb *sym = symtab_lookup(SymTable, param_name);
@@ -183,7 +179,9 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
                         symtab_add(SymTable, param_name, VAR_INT);
                         sym = symtab_lookup(SymTable, param_name);
                     }
-                    if (sym) sym->val = arg_val;
+                    sym->scope = SCOPE_LOCAL;
+                    sym->location = current_local_reg++;
+                    compile_expr(arg, sym->location);
                 }
                 param = param->next_sibling;
                 arg = arg->next_sibling;
@@ -252,7 +250,6 @@ void unescape(const char* in, char* out, size_t out_sz) {
                 case '"':  out[j++] = '"';  break;
                 case '\'': out[j++] = '\''; break;
                 default:
-                    // unknown escape sequence, keep the char
                     out[j++] = n;
                     i++;
                     break;
@@ -263,7 +260,6 @@ void unescape(const char* in, char* out, size_t out_sz) {
     }
     out[j] = '\0';
 }
-
 
 void compile_node(nu_ast_node_t *node) {
     if (!node) return;
@@ -279,33 +275,11 @@ void compile_node(nu_ast_node_t *node) {
         case AST_FUNC_DECL: {
             if (node->val.str && strcmp(node->val.str, "main") == 0) {
                 in_function = true;
-                current_local_reg = 4;
 
-                nu_ast_node_t *param_list = NULL;
                 for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
-                    if (child->type == AST_PARAM_LIST) param_list = child;
-                }
-
-                int param_idx = 0;
-                if (param_list) {
-                    for (nu_ast_node_t *p = param_list->first_child; p != NULL; p = p->next_sibling) {
-                        if (p->val.str) {
-                            symb *sym = symtab_lookup(SymTable, p->val.str);
-                            if (!sym) {
-                                symtab_add(SymTable, p->val.str, VAR_INT);
-                                sym = symtab_lookup(SymTable, p->val.str);
-                            }
-                            sym->scope = SCOPE_LOCAL;
-                            sym->location = param_idx++;
-                        }
+                    if (child->type == AST_BLOCK) {
+                        compile_node(child);
                     }
-                }
-                if (param_idx > current_local_reg) {
-                    current_local_reg = param_idx;
-                }
-
-                for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
-                    compile_node(child);
                 }
                 in_function = false;
             }
@@ -321,14 +295,6 @@ void compile_node(nu_ast_node_t *node) {
             nu_ast_node_t *fmt_node = node->first_child;
             if (!fmt_node) break;
 
-            int args[16];
-            int count = 0;
-            nu_ast_node_t *arg = fmt_node->next_sibling;
-            while (arg && count < 16) {
-                args[count++] = get_node_value(arg);
-                arg = arg->next_sibling;
-            }
-
             size_t in_len = strlen(fmt_node->val.str);
             char *val = nu_alloc(g_mm, in_len + 1);
             if (!val) break;
@@ -340,10 +306,16 @@ void compile_node(nu_ast_node_t *node) {
             
             unescape(val, realfmt, in_len + 1);
             int fmt_id = vm_register_format(realfmt);
+
+            int count = 0;
             int reg_base = 1;
-            for (int i = 0; i < count; i++) {
-                emit(LOAD(reg_base + i, args[i]));
+            nu_ast_node_t *arg = fmt_node->next_sibling;
+            while (arg && count < 16) {
+                compile_expr(arg, reg_base + count);
+                count++;
+                arg = arg->next_sibling;
             }
+
             emit(PRINTF(reg_base, count, fmt_id));
             break;
         }
@@ -352,23 +324,7 @@ void compile_node(nu_ast_node_t *node) {
             nu_ast_node_t *expr = node->first_child;
             if (!expr) break;
 
-            if (expr->type == AST_IDENT) {
-                symb *sym = symtab_lookup(SymTable, expr->val.str);
-                int val = sym ? sym->val : 0;
-
-                char *str_buf = nu_alloc(g_mm, 32);
-                if (!str_buf) break;
-
-                if (val >= 32 && val <= 126) {
-                    snprintf(str_buf, 32, "%c", val);
-                } else {
-                    snprintf(str_buf, 32, "%d", val);
-                }
-
-                int str_id = vm_register_string(str_buf);
-                emit(LOAD(R0, str_id));
-                emit(PRINT(R0));
-            } else if (expr->type == AST_CONST && expr->val.str) {
+            if (expr->type == AST_CONST && expr->val.str && expr->val.str[0] == '"') {
                 size_t orig_len = strlen(expr->val.str);
                 char *val = nu_alloc(g_mm, orig_len + 1);
                 char *realfmt = nu_alloc(g_mm, orig_len + 1);
@@ -391,6 +347,10 @@ void compile_node(nu_ast_node_t *node) {
                 }
 
                 if (val) nu_free(g_mm, val);
+            } else {
+                int fmt_id = vm_register_format("%d\n");
+                compile_expr(expr, 1);
+                emit(PRINTF(1, 1, fmt_id));
             }
             break;
         }
@@ -409,10 +369,6 @@ void compile_node(nu_ast_node_t *node) {
 
             if (in_function) {
                 sym->scope = SCOPE_LOCAL;
-                if (current_local_reg >= NUM_REGS) {
-                    fprintf(stderr, "Error: Out of local registers\n");
-                    exit(1);
-                }
                 sym->location = current_local_reg++;
 
                 if (val_node) {
@@ -472,7 +428,6 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
 
     fwrite(&hdr, sizeof(PawHdr), 1, f);
 
-    // Write registered string resources
     uint32_t str_count = vm_get_string_count();
     fwrite(&str_count, sizeof(uint32_t), 1, f);
     for (uint32_t i = 0; i < str_count; i++) {
@@ -482,7 +437,6 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
         fwrite(str, sizeof(char), len, f);
     }
 
-    // Write instructions stream
     fwrite(buf->instructions, sizeof(Instruction), buf->count, f);
 
     fclose(f);
@@ -495,6 +449,13 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
     g_root_node = node;
     code_buf = NULL;
     in_function = false;
+    current_local_reg = 4;
+
+    for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+        if (child->type == AST_CONST_DECL || child->type == AST_INT_DECL) {
+            compile_node(child);
+        }
+    }
 
     nu_ast_node_t *main_fn = NULL;
     for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
@@ -505,9 +466,7 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
     }
 
     if (main_fn) {
-        for (nu_ast_node_t *child = main_fn->first_child; child != NULL; child = child->next_sibling) {
-            compile_node(child);
-        }
+        compile_node(main_fn);
     } else {
         compile_node(node);
     }
