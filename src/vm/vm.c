@@ -8,7 +8,7 @@
 #define NEED_FORMAT
 #include <common.h>
 
-void run_paw_vm(const Instruction *code) {
+int32_t run_paw_vm(const Instruction *code) {
     int32_t R[NUM_REGS] = {0};
     size_t ip = 0;
 
@@ -75,7 +75,7 @@ void run_paw_vm(const Instruction *code) {
                 break;
             }
             case OP_HALT:
-                return;
+                return R[r1]; // Return the value given through r1
             default:
                 exit(1);
         }

@@ -69,7 +69,7 @@ typedef struct {
 #define JMPLT(r1, r2, addr)  ENCODE_J(OP_JMPLT, r1, r2, addr)
 #define PRINT(reg)           ENCODE_I(OP_PRINT, reg, 0)
 #define PRINTF(reg, count, fmt_id) ENCODE_R(OP_PRINTF, reg, count, fmt_id)
-#define HALT                 ENCODE_I(OP_HALT, 0, 0)
+#define HALT(reg)            ENCODE_I(OP_HALT, reg, 0)
 
 #define GET_OP(inst)   ((uint8_t)(((inst) >> 56) & 0xFF))
 #define GET_R1(inst)   ((uint8_t)(((inst) >> 48) & 0xFF))
@@ -77,7 +77,7 @@ typedef struct {
 #define GET_R3(inst)   ((uint8_t)(((inst) >> 32) & 0xFF))
 #define GET_IMM(inst)  ((int32_t)((inst) & 0xFFFFFFFF))
 
-void run_paw_vm(const Instruction *code);
+int32_t run_paw_vm(const Instruction *code);
 int vm_register_format(const char* s);
 int vm_register_string(const char* s);
 uint32_t vm_get_string_count(void);

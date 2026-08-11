@@ -12,7 +12,7 @@ nu_mm_t *g_mm = NULL;
 char backing[1024 * 1024 * 8]; // 8 mb
 char *current_filename = NULL;
 
-bool run_bytecode(const char *filename);
+int32_t run_bytecode(const char *filename);
 
 int main(int argc, char **argv) {
     glog_init();
@@ -32,34 +32,34 @@ int main(int argc, char **argv) {
     }
 
     current_filename = argv[1];
-    bool ran = run_bytecode(current_filename);
-    if (ran == false) {
+    int32_t ran = run_bytecode(current_filename);
+    if (ran == -1) {
         glog_log(NULL, 0, 0, GLOG_FATAL, "Couldn't run bytecode!");
 	goto fail;
     }
 
     nu_mm_destroy(g_mm);
-    return EXIT_SUCCESS;
+    return ran;
 
 fail:
     if (g_mm)  nu_mm_destroy(g_mm);
     return EXIT_FAILURE;
 }
 
-bool run_bytecode(const char *filename) {
+int32_t run_bytecode(const char *filename) {
     FILE *f = fopen(filename, "rb");
-    if (!f) return false;
+    if (!f) return -1;
 
     PawHdr hdr;
     if (fread(&hdr, sizeof(PawHdr), 1, f) != 1) {
         fclose(f);
-        return false;
+        return -1;
     }
 
     if (memcmp(hdr.magic, "PAWV", 4) != 0) {
         fprintf(stderr, "Invalid magic header\n");
         fclose(f);
-        return false;
+        return -1;
     }
 
     // Read String Table
@@ -80,8 +80,8 @@ bool run_bytecode(const char *filename) {
     fread(code, sizeof(Instruction), hdr.inst_count, f);
     fclose(f);
 
-    run_paw_vm(code);
+    int32_t ret = run_paw_vm(code);
 
     nu_free(g_mm, code);
-    return true;
+    return ret;
 }

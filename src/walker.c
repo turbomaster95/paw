@@ -339,7 +339,7 @@ void compile_node(nu_ast_node_t *node) {
             nu_ast_node_t *val_node = node->first_child;
             if (val_node) {
                 compile_expr(val_node, R0);
-                emit(PRINT(R0));
+                emit(HALT(R0));
             }
             break;
         }
@@ -394,7 +394,7 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
 
     code_buf = NULL;
     compile_node(node);
-    emit(HALT);
+    emit(HALT(R0));
 
     if (code_buf && code_buf->count > 0) {
         write_bytecode_file(out_filename, code_buf);
