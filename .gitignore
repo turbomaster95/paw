@@ -5,4 +5,7 @@
 *.a
 *.so
 obj/
+pawc
+pawv
 paw
+*.pawv

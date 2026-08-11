@@ -307,14 +307,15 @@ static void parse_statement(nu_ast_node_t* root) {
         case PRINT:
             parse_print_stmt(root);
             break;
-                        
-        default:
-            char errm[128];      
+
+        default: {
+            char errm[128];
             snprintf(errm, sizeof(errm),
                  "Unexpected token '%s' (\"%s\")\n", tokname(current_tok), yytext);
             synerr(yylineno, tok_col, errm);
             advance(); /* Skip token to prevent infinite loop */
             break;
+	}
     }
 }
 

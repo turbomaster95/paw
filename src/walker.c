@@ -8,6 +8,9 @@
 #include <lang.h>
 #include <vm.h>
 
+#define NEED_FORMAT
+#include <common.h>
+
 extern nu_ast_node_t *g_root_node;
 extern nu_mm_t* g_mm;
 

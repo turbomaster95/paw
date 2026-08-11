@@ -20,6 +20,11 @@ char *current_filename = NULL;
 char backing[1024 * 1024 * 8]; // 8 mb
 
 int main(int argc, char **argv) {
+    glog_init();
+    glog_config.show_source = true;
+    glog_config.use_color = 1;
+    glog_config.prefix = "paw";
+
     if (argc < 2) {
         glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s <source_file>\n", argv[0]);
         return EXIT_FAILURE;
@@ -33,11 +38,6 @@ int main(int argc, char **argv) {
 
     g_ast = nu_ast_create(g_mm);
     
-    glog_init();
-    glog_config.show_source = true;
-    glog_config.use_color = 1;
-    glog_config.prefix = "paw";
-
     current_filename = argv[1];
     yyin = fopen(current_filename, "r");
     if (!yyin) {

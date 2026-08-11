@@ -1,6 +1,7 @@
 OBJ := obj
 SRC := src
-TARGET := paw
+TARGETC := pawc
+TARGETV := pawv
 
 CC := gcc
 CFLAGS := -Iinclude -Wall -Wextra -pedantic
@@ -14,14 +15,17 @@ NU_BUILD_A := lib/nu/build/libnu.a
 NU_OBJ_A   := $(OBJ)/libnu.a
 
 C_SRCS   := $(wildcard $(SRC)/*.c)
-C_SRCS   += $(wildcard $(SRC)/vm/*.c)
+VM_SRCS  := $(wildcard $(SRC)/vm/*.c)
 
 GEN_SRCS := $(OBJ)/lex.yy.c
 
 OBJS := $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(C_SRCS)) $(GEN_SRCS:.c=.o)
 OBJS += $(OBJ)/libnu.a
 
-all: setup $(OBJ)/libnu.a $(TARGET)
+VM_OBJS := $(patsubst $(SRC)/vm/%.c, $(OBJ)/vm/%.o, $(VM_SRCS))
+VM_OBJS += $(OBJ)/libnu.a
+
+all: setup $(OBJ)/libnu.a $(TARGETC) $(TARGETV)
 
 setup:
 	$(Q)mkdir -p $(OBJ)
@@ -39,9 +43,13 @@ $(OBJ)/%.o: $(GEN_SRCS)
 	$(Q)echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET): $(OBJS) FORCE
+$(TARGETC): $(OBJS) FORCE
 	$(Q)echo "  LD      $@"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(OBJS)
+
+$(TARGETV): $(VM_OBJS) FORCE
+	$(Q)echo "  LD      $@"
+	$(Q)$(CC) $(CFLAGS) -o $@ $(VM_OBJS) $(LDFLAGS)
 
 $(NU_OBJ_A): include/nu.h include/nus.h
 	$(Q)mkdir -p $(OBJ)
