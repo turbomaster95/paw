@@ -45,7 +45,7 @@ $(OBJ)/%.o: $(GEN_SRCS)
 	$(Q)echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGETC): $(OBJS) FORCE
+$(TARGETC): $(OBJS) FORCE $(SRC)/prep.c
 	$(Q)echo "  LD      $@"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(OBJS)
 
