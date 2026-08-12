@@ -24,6 +24,23 @@ char *current_filename = NULL;
 
 char backing[1024 * 1024 * 8]; // 8 mb
 
+char *get_noext_filename(const char *path) {
+    if (!path) return NULL;
+
+    const char *base = get_basename(path);
+    const char *dot = strrchr(base, '.');
+
+    size_t len = (dot && dot != base) ? (size_t)(dot - base) : strlen(base);
+
+    char *res = nu_alloc(g_mm, len + 1);
+    if (!res) return NULL;
+
+    memcpy(res, base, len);
+    res[len] = '\0';
+
+    return res;
+}
+
 int main(int argc, char **argv) {
     glog_init();
     glog_config.show_source = true;
@@ -88,7 +105,7 @@ int main(int argc, char **argv) {
         goto fail;
     }
 
-    parse();
+    parse(get_noext_filename(current_filename));
     fclose(yyin);
     out_free(&output);
 

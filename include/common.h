@@ -54,6 +54,7 @@ const char *get_basename(const char *path);
 #else
 
 const char *get_basename(const char *path) {
+    if (!path) return "";
     const char *slash = strrchr(path, '/');
     return slash ? slash + 1 : path;
 }

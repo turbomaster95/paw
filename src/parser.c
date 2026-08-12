@@ -50,6 +50,11 @@ void synerr(int line, int col, const char* msg) {
     exit(EXIT_FAILURE);
 }
 
+void err(const char* msg) {
+    glog_log(current_filename, 0, 0, GLOG_ERROR, "Error: %s", msg);
+    exit(EXIT_FAILURE);
+}
+
 static void advance(void) {
     current_tok = yylex();
 }
@@ -360,7 +365,7 @@ void print_ast(nu_ast_node_t *node, int depth) {
     }
 }
 
-void parse(void) {
+void parse(const char* output_file) {
     advance(); /* prime the stream */
     nu_ast_node_t *root = newnode(NULL, AST_ROOT);
     g_ast->root = root;
@@ -368,10 +373,21 @@ void parse(void) {
 
     SymTable = nu_alloc(g_mm, sizeof(symbt));
     SymTable->head = NULL;
-   
+
     while (current_tok != 0) {
         parse_statement(root);
     }
+
     print_ast(root, 0);
-    walk_ast_to_file(root, "output.pawv");
+
+    if (!output_file) {
+	err("Output File is NULL!");
+    }
+
+    const char ext[] = ".pawv";
+    size_t len = strlen(output_file) + sizeof(ext);
+    char *filename = nu_alloc(g_mm, len);
+
+    snprintf(filename, len, "%s%s", output_file, ext);
+    walk_ast_to_file(root, filename);
 }
