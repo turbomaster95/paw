@@ -73,7 +73,7 @@ include/nus.h:
 
 CLEANF += $(OBJS)
 clean:
-	rm -rf $(TARGET)
+	rm -rf $(TARGETC) $(TARGETV)
 	rm -rf $(CLEANF)
 
 FORCE:
