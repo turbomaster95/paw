@@ -8,6 +8,57 @@
 #define NEED_FORMAT
 #include <common.h>
 
+static void vm_exec_printf(const int32_t *regs, int reg_base, int arg_count, const char *fmt) {
+    if (!fmt) return;
+
+    int arg_idx = 0;
+    const char *p = fmt;
+
+    while (*p) {
+        if (*p != '%') {
+            putchar(*p++);
+            continue;
+        }
+
+        p++; // Skip '%'
+
+        if (*p == '%') {
+            putchar('%');
+            p++;
+            continue;
+        }
+
+        char spec[32];
+        int len = 0;
+        spec[len++] = '%';
+
+        while (*p && !strchr("diuoxXcspfeEgGaA", *p) && len < 30) {
+            spec[len++] = *p++;
+        }
+
+        if (*p) {
+            char conversion = *p++;
+            spec[len++] = conversion;
+            spec[len] = '\0';
+
+            if (arg_idx < arg_count) {
+                int32_t raw_val = regs[reg_base + arg_idx++];
+
+                if (conversion == 's') {
+                    const char *str = vm_get_string((uint32_t)raw_val);
+                    printf(spec, str ? str : "(null)");
+                } else if (conversion == 'c') {
+                    printf(spec, (char)raw_val);
+                } else {
+                    printf(spec, raw_val);
+                }
+            } else {
+                fputs(spec, stdout);
+            }
+        }
+    }
+}
+
 int32_t run_paw_vm(const Instruction *code) {
     int32_t R[NUM_REGS] = {0};
     size_t ip = 0;
@@ -56,7 +107,7 @@ int32_t run_paw_vm(const Instruction *code) {
             case OP_PRINT: {
                 int str_id = R[r1];
                 const char* str = vm_get_string(str_id);
-                printf("%s\n", str);
+                printf("%s\n", str ? str : "(null)");
                 break;
             }
             case OP_PRINTF: {
@@ -65,45 +116,8 @@ int32_t run_paw_vm(const Instruction *code) {
                 int fmt_id = r3;
 
                 const char* fmt = vm_get_string(fmt_id);
-                char buf[4096];
-                char *out = buf;
-                size_t remaining = sizeof(buf);
-                int arg_idx = 0;
 
-                for (const char *p = fmt; *p && remaining > 1; p++) {
-                    if (*p == '%' && *(p + 1) != '\0') {
-                        p++;
-                        if (*p == '%') {
-                            *out++ = '%';
-                            remaining--;
-                        } else if (*p == 's') {
-                            int str_id = (arg_idx < count) ? R[reg + arg_idx++] : -1;
-                            const char *s = vm_get_string(str_id);
-                            int written = snprintf(out, remaining, "%s", s);
-                            if (written > 0) {
-                                out += written;
-                                remaining -= written;
-                            }
-                        } else if (*p == 'd' || *p == 'i') {
-                            int val = (arg_idx < count) ? R[reg + arg_idx++] : 0;
-                            int written = snprintf(out, remaining, "%d", val);
-                            if (written > 0) {
-                                out += written;
-                                remaining -= written;
-                            }
-                        } else {
-                            // fallback
-                            *out++ = '%';
-                            *out++ = *p;
-                            remaining -= 2;
-                        }
-                    } else {
-                        *out++ = *p;
-                        remaining--;
-                    }
-                }
-                *out = '\0';
-                printf("%s", buf);
+                vm_exec_printf(R, reg, count, fmt);
                 break;
             }
             case OP_CALL: {
@@ -111,11 +125,6 @@ int32_t run_paw_vm(const Instruction *code) {
                     fprintf(stderr, "Stack overflow\n");
                     exit(1);
                 }
-
-                // r1 = dest_reg in caller
-                // r2 = base reg of args in caller
-                // r3 = args count
-                // imm = target function's ip
 
                 call_stack[sp].return_ip = ip;
                 call_stack[sp].dest_reg = r1;
@@ -151,7 +160,7 @@ int32_t run_paw_vm(const Instruction *code) {
                 break;
             }
             case OP_HALT:
-                return R[r1]; // Return the value given through r1
+                return R[r1];
             default:
                 exit(1);
         }
