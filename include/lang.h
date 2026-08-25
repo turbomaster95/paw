@@ -13,6 +13,7 @@
     X(AST_INT_DECL) \
     X(AST_VAR_DECL) \
     X(AST_CONST_DECL) \
+    X(AST_CHAR_DECL) \
     X(AST_ADD) \
     X(AST_SUB) \
     X(AST_MUL) \

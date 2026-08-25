@@ -206,7 +206,14 @@ void parse_constvar_decl(nu_ast_node_t* root) {
         synerr(yylineno, tok_col, "Expected type after 'const'");
     }
 
-    var_type_t var_type = (current_tok == CHAR) ? VAR_STRING /* or VAR_CHAR */ : VAR_INT;
+    var_type_t var_type;
+    if (current_tok == CHAR) {
+        var_type = VAR_CHAR;
+    } else if (current_tok == STRING_LITERAL) {
+        var_type = VAR_STRING;
+    } else {
+        var_type = VAR_INT;
+    }
     advance();
     
     nu_ast_node_t* const_node = newnode(root, AST_CONST_DECL);
@@ -224,6 +231,8 @@ void parse_constvar_decl(nu_ast_node_t* root) {
     if (match('=')) {
         advance();
         parse_expression(const_node);
+    } else {
+        synerr(yylineno, tok_col, "Constants must be initialized at declaration");
     }
 
     expect(';', "Expected ';' after declaration");
@@ -293,6 +302,31 @@ void parse_function_decl(nu_ast_node_t* root) {
     parse_block(fn_node);
 }
 
+void parse_char_decl(nu_ast_node_t* root) {
+    expect(CHAR, "Expected 'char'");
+
+    nu_ast_node_t* char_node = newnode(root, AST_CHAR_DECL);
+
+    if (!match(IDENTIFIER)) {
+        synerr(yylineno, tok_col, "Expected an identifier for the char!");
+        return;
+    }
+
+    char* varname = nu_strdup(yytext);
+    newstrnode(char_node, AST_VAR_DECL, yytext);
+    advance();
+
+    symtab_add(SymTable, varname, VAR_CHAR);
+    nu_free(g_mm, varname);
+
+    if (match('=')) {
+        advance();
+        parse_expression(char_node);
+    }
+
+    expect(';', "Expected ';' after declaration");
+}
+
 static void parse_statement(nu_ast_node_t* root) {
     switch (current_tok) {
         case RETURN:
@@ -318,6 +352,10 @@ static void parse_statement(nu_ast_node_t* root) {
         case PRINT:
             parse_print_stmt(root);
             break;
+
+	case CHAR:
+	    parse_char_decl(root);
+	    break;
 
 	case IDENTIFIER: {
             parse_expression(root);

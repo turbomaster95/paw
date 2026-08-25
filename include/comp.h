@@ -31,6 +31,7 @@ typedef enum {
     VAR_START = 0,
     VAR_INT,
     VAR_STRING,
+    VAR_CHAR
 } var_type_t;
 
 typedef enum {
