@@ -71,10 +71,9 @@ CLEANF += include/nus.h
 include/nus.h:
 	$(Q)(cd lib/nu && cp include/nus.h ../../include)
 
-CLEANF += $(OBJS)
 clean:
 	rm -rf $(TARGETC) $(TARGETV)
-	rm -rf $(CLEANF)
+	rm -rf $(CLEANF) $(OBJ)
 
 FORCE:
 
