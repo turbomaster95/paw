@@ -21,7 +21,7 @@ typedef int64_t  i64;
 #define ROM_SIZE 2048
 #define RAM_SIZE 65536
 
-#define VM_MAGIC 0x50415756
+#define VM_MAGIC 0x56574150
 #define VM_VERSION 1
 
 // CPU Flags
