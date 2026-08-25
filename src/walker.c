@@ -97,7 +97,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
     switch (node->type) {
         case AST_CONST: {
             int val = get_node_value(node);
-            emit(LOAD(target_reg, val));
+            emit(EMIT_LOAD(target_reg, val));
             return target_reg;
         }
 
@@ -105,14 +105,14 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             symb *sym = symtab_lookup(SymTable, node->val.str);
             if (!sym) {
                 fprintf(stderr, "Error: Undefined variable '%s'\n", node->val.str);
-                emit(LOAD(target_reg, 0));
+                emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
 
             if (sym->scope == SCOPE_GLOBAL) {
-                emit(LOAD(target_reg, sym->val));
+                emit(EMIT_LOAD(target_reg, sym->val));
             } else {
-                emit(MOV(target_reg, sym->location));
+                emit(EMIT_MOV(target_reg, sym->location));
             }
             return target_reg;
         }
@@ -127,7 +127,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             compile_expr(left, r_left);
             compile_expr(right, r_right);
 
-            emit(ADD(target_reg, r_left, r_right));
+            emit(EMIT_ADD(target_reg, r_left, r_right));
             return target_reg;
         }
 
@@ -141,7 +141,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             compile_expr(left, r_left);
             compile_expr(right, r_right);
 
-            emit(SUB(target_reg, r_left, r_right));
+            emit(EMIT_SUB(target_reg, r_left, r_right));
             return target_reg;
         }
 
@@ -157,7 +157,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
 
             if (!target_fn) {
                 fprintf(stderr, "Runtime Error: Undefined function '%s'\n", node->val.str);
-                emit(LOAD(target_reg, 0));
+                emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
 
@@ -192,7 +192,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             }
             
             if (target_reg != R0) {
-                emit(MOV(target_reg, R0));
+                emit(EMIT_MOV(target_reg, R0));
             }
             return target_reg;
         }
@@ -316,7 +316,7 @@ void compile_node(nu_ast_node_t *node) {
                 arg = arg->next_sibling;
             }
 
-            emit(PRINTF(reg_base, count, fmt_id));
+            emit(EMIT_PRINTF(reg_base, count, fmt_id));
             break;
         }
 
@@ -342,15 +342,15 @@ void compile_node(nu_ast_node_t *node) {
                     unescape(val, realfmt, orig_len + 1);
 
                     int str_id = vm_register_string(realfmt);
-                    emit(LOAD(R0, str_id));
-                    emit(PRINT(R0));
+                    emit(EMIT_LOAD(R0, str_id));
+                    emit(EMIT_PRINT(R0));
                 }
 
                 if (val) nu_free(g_mm, val);
             } else {
                 int fmt_id = vm_register_format("%d\n");
                 compile_expr(expr, 1);
-                emit(PRINTF(1, 1, fmt_id));
+                emit(EMIT_PRINTF(1, 1, fmt_id));
             }
             break;
         }
@@ -374,7 +374,7 @@ void compile_node(nu_ast_node_t *node) {
                 if (val_node) {
                     compile_expr(val_node, sym->location);
                 } else {
-                    emit(LOAD(sym->location, 0));
+                    emit(EMIT_LOAD(sym->location, 0));
                 }
             } else {
                 sym->scope = SCOPE_GLOBAL;
@@ -417,26 +417,42 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
         return false;
     }
 
-    PawHdr hdr;
-    hdr.magic[0] = 'P';
-    hdr.magic[1] = 'A';
-    hdr.magic[2] = 'W';
-    hdr.magic[3] = 'V';
-    hdr.version = 1;
-    hdr.reserved = 0x0000;
-    hdr.inst_count = buf->count;
-
-    fwrite(&hdr, sizeof(PawHdr), 1, f);
-
     uint32_t str_count = vm_get_string_count();
+
+    // 1. Calculate EXACT total byte length of string payload
+    uint32_t string_table_bytes = sizeof(uint32_t); // 4 bytes for str_count integer
+    for (uint32_t i = 0; i < str_count; i++) {
+        const char *str = vm_get_string(i);
+        uint32_t len = str ? (uint32_t)strlen(str) : 0;
+        string_table_bytes += sizeof(uint32_t) + len;
+    }
+
+    // 2. Fill VMHeader
+    VMHeader hdr = {
+        .magic = VM_MAGIC,
+        .version = VM_VERSION,
+        .inst_count = (uint32_t)buf->count,
+        .data_size = 0
+    };
+
+    // 3. Write Header
+    if (fwrite(&hdr, sizeof(VMHeader), 1, f) != 1) {
+        fclose(f);
+        return false;
+    }
+
+    // 4. Write Payload (String Table)
     fwrite(&str_count, sizeof(uint32_t), 1, f);
     for (uint32_t i = 0; i < str_count; i++) {
         const char *str = vm_get_string(i);
-        uint32_t len = (uint32_t)strlen(str);
+        uint32_t len = str ? (uint32_t)strlen(str) : 0;
         fwrite(&len, sizeof(uint32_t), 1, f);
-        fwrite(str, sizeof(char), len, f);
+        if (len > 0) {
+            fwrite(str, sizeof(char), len, f);
+        }
     }
 
+    // 5. Write Instructions
     fwrite(buf->instructions, sizeof(Instruction), buf->count, f);
 
     fclose(f);
@@ -471,7 +487,7 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
         compile_node(node);
     }
 
-    emit(HALT(R0));
+    emit(EMIT_HALT(R0));
 
     if (code_buf && code_buf->count > 0) {
         write_bytecode_file(out_filename, code_buf);

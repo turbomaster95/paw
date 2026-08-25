@@ -11,11 +11,8 @@
 #include <common.h>
 
 nu_mm_t *g_mm = NULL;
-
-char backing[1024 * 1024 * 8]; // 8 mb
+char backing[1024 * 1024 * 8]; // 8 MB arena
 char *current_filename = NULL;
-
-int32_t run_bytecode(const char *filename);
 
 int main(int argc, char **argv) {
     glog_init();
@@ -23,69 +20,38 @@ int main(int argc, char **argv) {
 
     if (argc < 2) {
         glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s <bytecode.pawv>\n", get_basename(argv[0]));
-        goto fail;
+        return EXIT_FAILURE;
     }
 
     g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
     if (!g_mm) {
         glog_log(NULL, 0, 0, GLOG_FATAL, "Fatal: Failed to allocate memory arena!");
-        goto fail;
+        return EXIT_FAILURE;
     }
+
+    Memory *mem = nu_alloc(g_mm, sizeof(Memory));
+    VM *vm = nu_alloc(g_mm, sizeof(VM));
+
+    if (!mem || !vm) {
+        glog_log(NULL, 0, 0, GLOG_FATAL, "Fatal: Out of memory!");
+        nu_mm_destroy(g_mm);
+        return EXIT_FAILURE;
+    }
+
+    VM_reset(vm, mem);
 
     current_filename = argv[1];
-    int32_t ran = run_bytecode(current_filename);
-    if (ran == -1) {
-        glog_log(NULL, 0, 0, GLOG_FATAL, "Couldn't run bytecode!");
-	goto fail;
+    u32 load_vaddr = 0x00;
+
+    int ret = VM_run_file(current_filename, mem, vm, load_vaddr);
+    if (ret != 0) {
+        glog_log(NULL, 0, 0, GLOG_FATAL, "Couldn't run bytecode file: %s , errcode: %d", current_filename, ret);
+        nu_mm_destroy(g_mm);
+        return EXIT_FAILURE;
     }
 
+    VM_clear_strings(vm);
     nu_mm_destroy(g_mm);
-    return ran;
-
-fail:
-    if (g_mm)  nu_mm_destroy(g_mm);
-    return EXIT_FAILURE;
-}
-
-int32_t run_bytecode(const char *filename) {
-    FILE *f = fopen(filename, "rb");
-    if (!f) return -1;
-
-    PawHdr hdr;
-    if (fread(&hdr, sizeof(PawHdr), 1, f) != 1) {
-        fclose(f);
-        return -1;
-    }
-
-    if (memcmp(hdr.magic, "PAWV", 4) != 0) {
-        fprintf(stderr, "Invalid magic header\n");
-        fclose(f);
-        return -1;
-    }
-
-    // Read String Table
-    uint32_t str_count = 0;
-    fread(&str_count, sizeof(uint32_t), 1, f);
-    for (uint32_t i = 0; i < str_count; i++) {
-        uint32_t len = 0;
-        fread(&len, sizeof(uint32_t), 1, f);
-        char *s = nu_alloc(g_mm, len + 1);
-        fread(s, sizeof(char), len, f);
-        s[len] = '\0';
-        vm_register_string(s);
-	nu_free(g_mm, s);
-    }
-
-    // Read Bytecode
-    Instruction *code = nu_alloc(g_mm, sizeof(Instruction) * hdr.inst_count);
-    fread(code, sizeof(Instruction), hdr.inst_count, f);
-    fclose(f);
-
-    int32_t ret = run_paw_vm(code);
-    if (!ret) {
-	ret = -1;
-    }
-
-    nu_free(g_mm, code);
     return ret;
 }
+

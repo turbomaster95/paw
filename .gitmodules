@@ -1,3 +1,6 @@
 [submodule "lib/nu"]
 	path = lib/nu
 	url = https://github.com/turbomaster95/libnu
+[submodule "lib/nosry"]
+	path = lib/nosry
+	url = https://github.com/turbomaster95/nosry

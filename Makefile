@@ -4,7 +4,7 @@ TARGETC := pawc
 TARGETV := pawv
 
 CC := gcc
-CFLAGS := -Iinclude -Wall -Wextra -pedantic -Wno-unused
+CFLAGS := -Iinclude -Wall -Wextra -pedantic -Wno-unused -Ilib
 COPTS := 
 
 CFLAGS += $(COPTS)
