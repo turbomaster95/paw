@@ -307,16 +307,18 @@ void compile_node(nu_ast_node_t *node) {
             unescape(val, realfmt, in_len + 1);
             int fmt_id = vm_register_format(realfmt);
 
+	    emit(EMIT_LOAD(R0, fmt_id));
+
             int count = 0;
             int reg_base = 1;
             nu_ast_node_t *arg = fmt_node->next_sibling;
-            while (arg && count < 16) {
+            while (arg && count < 15) {
                 compile_expr(arg, reg_base + count);
                 count++;
                 arg = arg->next_sibling;
             }
 
-            emit(EMIT_PRINTF(reg_base, count, fmt_id));
+            emit(INST_SYS(2));
             break;
         }
 
@@ -343,14 +345,15 @@ void compile_node(nu_ast_node_t *node) {
 
                     int str_id = vm_register_string(realfmt);
                     emit(EMIT_LOAD(R0, str_id));
-                    emit(EMIT_PRINT(R0));
+                    emit(INST_SYS(1));
                 }
 
                 if (val) nu_free(g_mm, val);
             } else {
                 int fmt_id = vm_register_format("%d\n");
-                compile_expr(expr, 1);
-                emit(EMIT_PRINTF(1, 1, fmt_id));
+		emit(EMIT_LOAD(R0, fmt_id));
+               	compile_expr(expr, R1);
+                emit(INST_SYS(2));
             }
             break;
         }

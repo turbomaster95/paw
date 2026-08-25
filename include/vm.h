@@ -51,18 +51,6 @@ typedef struct {
 #define EMIT_SUB(dest_r, src1_r, src2_r) INST_SUB(dest_r, src2_r)
 #define EMIT_HALT(src_r)                 ((Inst){ .opcode = OP_HALT })
 
-#ifdef OP_PRINT
-  #define EMIT_PRINT(src_r)               ENCODE_R(OP_PRINT, src_r, 0, 0)
-#else
-  #define EMIT_PRINT(src_r)               ENCODE_R(OP_SYS, src_r, 0, 0)
-#endif
-
-#ifdef OP_PRINTF
-  #define EMIT_PRINTF(base_r, count, fmt) ENCODE_R(OP_PRINTF, base_r, count, fmt)
-#else
-  #define EMIT_PRINTF(base_r, count, fmt) ENCODE_R(OP_SYS, base_r, count, fmt)
-#endif
-
 int32_t run_paw_vm(VM *vm, Memory *mem, size_t prog_len);
 
 #endif // PAWV_H
