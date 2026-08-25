@@ -312,7 +312,7 @@ void compile_node(nu_ast_node_t *node) {
             int count = 0;
             int reg_base = 1;
             nu_ast_node_t *arg = fmt_node->next_sibling;
-            while (arg && count < 15) {
+            while (arg && count < UF_REGS) {
                 compile_expr(arg, reg_base + count);
                 count++;
                 arg = arg->next_sibling;
