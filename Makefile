@@ -17,9 +17,11 @@ CFLAGS += $(COPTS)
 
 Q = @
 
-NU_BUILD_A := lib/nu/build/libnu.a
-NU_OBJ_A   := $(OBJ)/libnu.a
-WASI_NU_OBJ_A := $(WASI_OBJ)/libnu.a
+NU_BUILD_DIR      := lib/nu/build
+NU_OBJ_A          := $(OBJ)/libnu.a
+
+WASI_NU_BUILD_DIR := lib/nu/build-wasi
+WASI_NU_OBJ_A     := $(WASI_OBJ)/libnu.a
 
 EXCLUDE  := $(SRC)/prep.c
 C_SRCS   := $(filter-out $(EXCLUDE), $(wildcard $(SRC)/*.c))
@@ -43,18 +45,17 @@ WASI_VM_OBJS += $(WASI_OBJ)/libnu.a
 all: setup $(OBJ)/libnu.a $(TARGETC) $(TARGETV)
 
 setup:
-	$(Q)mkdir -p $(OBJ)
-	$(Q)mkdir -p $(OBJ)/vm
+	$(Q)mkdir -p $(OBJ) $(OBJ)/vm
 
-$(OBJ)/lex.yy.c: $(SRC)/lex.l
-	$(Q)echo "  FLEX    $^"
-	$(Q)flex -o $@ $^
+$(OBJ)/lex.yy.c: $(SRC)/lex.l setup
+	$(Q)echo "  FLEX    $<"
+	$(Q)flex -o $@ $<
 
-$(OBJ)/%.o: $(SRC)/%.c
+$(OBJ)/%.o: $(SRC)/%.c setup
 	$(Q)echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJ)/%.o: $(GEN_SRCS)
+$(OBJ)/%.o: $(GEN_SRCS) setup
 	$(Q)echo "  CC      $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
@@ -66,27 +67,23 @@ $(TARGETV): $(VM_OBJS) FORCE
 	$(Q)echo "  LD      $@"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(VM_OBJS) $(LDFLAGS)
 
-$(NU_OBJ_A): include/nu.h include/nus.h
-	$(Q)mkdir -p $(OBJ)
-	$(Q)if [ -f $(NU_BUILD_A) ]; then \
-		echo "  NU      $(NU_BUILD_A) -> $@"; \
-		cp $(NU_BUILD_A) $@; \
-	else \
-		echo "  NU         (missing $(NU_BUILD_A))"; \
-		(cd lib/nu && ./compile && cp build/libnu.a ../../$(NU_OBJ_A)); \
-	fi
+$(NU_OBJ_A): include/nu.h include/nus.h setup
+	$(Q)echo "  CMAKE   lib/nu (Native)"
+	$(Q)cmake -B $(NU_BUILD_DIR) -S lib/nu
+	$(Q)cmake --build $(NU_BUILD_DIR)
+	$(Q)cp $(NU_BUILD_DIR)/libnu.a $@
 
 CLEANF += include/nu.h
 include/nu.h:
-	$(Q)(cd lib/nu && cp include/nu.h ../../include)
+	$(Q)(cd lib/nu && cp include/nu.h ../../include 2>/dev/null || cp nu.h ../../include)
 
 CLEANF += include/nus.h
 include/nus.h:
-	$(Q)(cd lib/nu && cp include/nus.h ../../include)
+	$(Q)(cd lib/nu && cp include/nus.h ../../include 2>/dev/null || cp nus.h ../../include)
 
 wasi-setup: include/nu.h include/nus.h
-	$(Q)mkdir -p $(WASI_OBJ)
-	$(Q)mkdir -p $(WASI_OBJ)/vm
+	$(Q)mkdir -p $(OBJ) $(OBJ)/vm
+	$(Q)mkdir -p $(WASI_OBJ) $(WASI_OBJ)/vm
 
 $(WASI_OBJ)/lex.yy.c: $(OBJ)/lex.yy.c wasi-setup
 	$(Q)cp $< $@
@@ -100,15 +97,20 @@ $(WASI_OBJ)/%.o: $(WASI_OBJ)/%.c wasi-setup
 	$(Q)$(WASI_CC) $(WASI_TARGET_FLAG) $(CFLAGS) -c $< -o $@
 
 $(WASI_NU_OBJ_A): include/nu.h include/nus.h wasi-setup
-	$(Q)echo "  WASI NU libnu.a"
-	$(Q)(cd lib/nu && CC="$(WASI_CC) $(WASI_TARGET_FLAG)" ./compile && cp build/libnu.a ../../$(WASI_NU_OBJ_A))
+	$(Q)echo "  CMAKE   lib/nu (WASI)"
+	$(Q)cmake -B $(WASI_NU_BUILD_DIR) -S lib/nu \
+		-DCMAKE_C_COMPILER=$(WASI_CC) \
+		-DCMAKE_C_FLAGS="$(WASI_TARGET_FLAG)" \
+		-DCMAKE_SYSTEM_NAME=Generic
+	$(Q)cmake --build $(WASI_NU_BUILD_DIR)
+	$(Q)cp $(WASI_NU_BUILD_DIR)/libnu.a $@
 
 $(WASI_TARGETC): $(WASI_OBJS) FORCE $(SRC)/prep.c
-	$(Q)echo "  WASI LD @"
+	$(Q)echo "  WASI LD $@"
 	$(Q)$(WASI_CC) $(WASI_TARGET_FLAG) $(CFLAGS) -o $@ $(WASI_OBJS)
 
 $(WASI_TARGETV): $(WASI_VM_OBJS) FORCE
-	$(Q)echo "  WASI LD @"
+	$(Q)echo "  WASI LD $@"
 	$(Q)$(WASI_CC) $(WASI_TARGET_FLAG) $(CFLAGS) -o $@ $(WASI_VM_OBJS) $(LDFLAGS)
 
 wasi: wasi-setup $(OBJ)/lex.yy.c $(WASI_NU_OBJ_A) $(WASI_TARGETC) $(WASI_TARGETV)
@@ -116,6 +118,7 @@ wasi: wasi-setup $(OBJ)/lex.yy.c $(WASI_NU_OBJ_A) $(WASI_TARGETC) $(WASI_TARGETV
 clean:
 	rm -rf $(TARGETC) $(TARGETV) $(WASI_TARGETC) $(WASI_TARGETV)
 	rm -rf $(CLEANF) $(OBJ) $(WASI_OBJ)
+	rm -rf $(NU_BUILD_DIR) $(WASI_NU_BUILD_DIR)
 
 FORCE:
 
