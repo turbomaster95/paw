@@ -5,7 +5,7 @@ TARGETV := pawv
 
 WASI_OBJ := obj-wasi
 WASI_CC  := clang
-WASI_TARGET_FLAG := --target=wasm32-wasip1
+WASI_TARGET_FLAG := --target=wasm32-wasip1 -D_WASI_EMULATED_PROCESS_CLOCKS -DPK_ENABLE_SOCKET=0 -DPK_ENABLE_OS=0
 WASI_TARGETC := $(TARGETC).wasm
 WASI_TARGETV := $(TARGETV).wasm
 
