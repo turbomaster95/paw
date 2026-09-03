@@ -2,6 +2,8 @@
 #define VMGLUE_H
 
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // Unsigned Integers
 typedef uint8_t  u8;
@@ -30,5 +32,16 @@ typedef int64_t  i64;
 #define FLAG_NEGATIVE (1 << 1)
 #define FLAG_CARRY    (1 << 2)
 #define FLAG_OVERFLOW (1 << 3)
+
+// Glue Functions
+#define FILESTRUCT FILE
+#define READFILE   fread
+#define WRITFILE   fwrite
+#define OPENFILE   fopen
+#define CLOSFILE   fclose
+#define PUTSFILE   fputs
+#define GLUEMALLOC malloc
+#define GLUEFREE   free
+#define PRINTF     printf
 
 #endif // VMGLUE_H
