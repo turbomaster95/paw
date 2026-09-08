@@ -44,41 +44,22 @@ static int get_node_value(nu_ast_node_t *node) {
     if (node->type == AST_CONST) {
         if (!node->val.str) return 0;
 
-        if (node->val.str[0] == '\'') {
-            if (node->val.str[1] == '\\') {
-                switch (node->val.str[2]) {
-                    case 'n': return '\n';
-                    case 't': return '\t';
-                    case '0': return '\0';
-                    default: return node->val.str[2];
-                }
-            }
-            return (unsigned char)node->val.str[1];
+        char clean[512];
+        const char *src = node->val.str;
+
+        char tmp[512];
+        strncpy(tmp, src, sizeof(tmp));
+        while ((tmp[0] == '"' || tmp[0] == '\'') && strlen(tmp) >= 2) {
+            removequotes(tmp, clean, sizeof(clean));
+            if (strcmp(tmp, clean) == 0) break;
+            strcpy(tmp, clean);
         }
 
-        if (node->val.str[0] == '"') {
-            size_t orig_len = strlen(node->val.str);
-            char *val = nu_alloc(g_mm, orig_len + 1);
-            char *realstr = nu_alloc(g_mm, orig_len + 1);
-            int str_id = 0;
-
-            if (val && realstr) {
-                strcpy(val, node->val.str);
-                while ((val[0] == '"' || val[0] == '\'') && strlen(val) >= 2) {
-                    char tmp[512];
-                    removequotes(val, tmp, sizeof(tmp));
-                    if (strcmp(val, tmp) == 0) break;
-                    strcpy(val, tmp);
-                }
-                unescape(val, realstr, orig_len + 1);
-                str_id = vm_register_string(realstr);
-            }
-
-            if (val) nu_free(g_mm, val);
-            return str_id;
+        if (strlen(tmp) == 1) {
+            return (unsigned char)tmp[0];
         }
 
-        return atoi(node->val.str);
+        return atoi(tmp);
     }
 
     if (node->type == AST_IDENT) {
@@ -322,7 +303,7 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
-        case AST_PRINT_STMT: {
+	case AST_PRINT_STMT: {
             nu_ast_node_t *expr = node->first_child;
             if (!expr) break;
 
@@ -349,15 +330,28 @@ void compile_node(nu_ast_node_t *node) {
                 }
 
                 if (val) nu_free(g_mm, val);
+                if (realfmt) nu_free(g_mm, realfmt);
             } else {
-                int fmt_id = vm_register_format("%d\n");
-		emit(EMIT_LOAD(R0, fmt_id));
-               	compile_expr(expr, R1);
+                const char *fmt_str = "%d\n";
+
+                if (expr->type == AST_IDENT) {
+                    symb *sym = symtab_lookup(SymTable, expr->val.str);
+                    if (sym && sym->type == VAR_CHAR) {
+                        fmt_str = "%c\n";
+                    }
+                } else if (expr->type == AST_CONST && expr->val.str && expr->val.str[0] == '\'') {
+                    fmt_str = "%c\n";
+                }
+
+                int fmt_id = vm_register_format(fmt_str);
+                emit(EMIT_LOAD(R0, fmt_id));
+                compile_expr(expr, R1);
                 emit(INST_SYS(2));
             }
             break;
         }
 
+	case AST_CHAR_DECL:
         case AST_INT_DECL:
         case AST_CONST_DECL: {
             nu_ast_node_t *var_node = node->first_child;
@@ -366,7 +360,7 @@ void compile_node(nu_ast_node_t *node) {
 
             symb *sym = symtab_lookup(SymTable, var_name);
             if (!sym) {
-                symtab_add(SymTable, var_name, VAR_INT);
+                symtab_add(SymTable, var_name, node->type == AST_CHAR_DECL ? VAR_CHAR : VAR_INT);
                 sym = symtab_lookup(SymTable, var_name);
             }
 
@@ -422,15 +416,13 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
 
     uint32_t str_count = vm_get_string_count();
 
-    // 1. Calculate EXACT total byte length of string payload
-    uint32_t string_table_bytes = sizeof(uint32_t); // 4 bytes for str_count integer
+    uint32_t string_table_bytes = sizeof(uint32_t);
     for (uint32_t i = 0; i < str_count; i++) {
         const char *str = vm_get_string(i);
         uint32_t len = str ? (uint32_t)strlen(str) : 0;
         string_table_bytes += sizeof(uint32_t) + len;
     }
 
-    // 2. Fill VMHeader
     VMHeader hdr = {
         .magic = VM_MAGIC,
         .version = VM_VERSION,
@@ -438,13 +430,11 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
         .data_size = 0
     };
 
-    // 3. Write Header
     if (fwrite(&hdr, sizeof(VMHeader), 1, f) != 1) {
         fclose(f);
         return false;
     }
 
-    // 4. Write Payload (String Table)
     fwrite(&str_count, sizeof(uint32_t), 1, f);
     for (uint32_t i = 0; i < str_count; i++) {
         const char *str = vm_get_string(i);
@@ -455,7 +445,6 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
         }
     }
 
-    // 5. Write Instructions
     fwrite(buf->instructions, sizeof(Instruction), buf->count, f);
 
     fclose(f);
@@ -485,9 +474,16 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
     }
 
     if (main_fn) {
+        for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+            if (child->type == AST_CONST_DECL || child->type == AST_INT_DECL || child->type == AST_CHAR_DECL) {
+                compile_node(child);
+            }
+        }
         compile_node(main_fn);
     } else {
-        compile_node(node);
+        for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+            compile_node(child);
+        }
     }
 
     emit(EMIT_HALT(R0));

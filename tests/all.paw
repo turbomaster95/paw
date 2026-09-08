@@ -1,0 +1,10 @@
+int num = 10;
+int inum = "h";
+char chr = "x";
+char ichr = 104;
+
+print(num);
+print(inum);
+print(chr);
+print(ichr);
+
