@@ -10,7 +10,7 @@ WASI_TARGETC := $(TARGETC).wasm
 WASI_TARGETV := $(TARGETV).wasm
 
 CC := gcc
-CFLAGS := -Iinclude -Wall -Wextra -pedantic -Wno-unused -Ilib
+CFLAGS := -Iinclude -Wall -Wextra -pedantic -Wno-unused -Ilib -MMD -MP -MF $(OBJ)/$@.d
 COPTS :=
 
 CFLAGS += $(COPTS)

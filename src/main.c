@@ -42,15 +42,19 @@ char *get_noext_filename(const char *path) {
 }
 
 int main(int argc, char **argv) {
+    if (argc < 2) {
+        glog_log(NULL, 0, 0, GLOG_NOTEXT, "Usage: %s [options] <source_file>", get_basename(argv[0]));
+	glog_log(NULL, 0, 0, GLOG_NOTEXT, "Options:");
+	glog_log(NULL, 0, 0, GLOG_NOTEXT, " -D<name>       Defines a preprocessor variable");
+	glog_log(NULL, 0, 0, GLOG_NOTEXT, " -I<path>       Includes a folder into the global list");
+        return EXIT_FAILURE;
+    }
+
     glog_init();
     glog_config.show_source = true;
     glog_config.use_color = 1;
     glog_config.prefix = "paw";
 
-    if (argc < 2) {
-        glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s [options] <source_file>\n", get_basename(argv[0]));
-        return EXIT_FAILURE;
-    }
 
     g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
     if (!g_mm) {

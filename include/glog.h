@@ -9,7 +9,8 @@ typedef enum {
     GLOG_NOTE,
     GLOG_WARNING,
     GLOG_ERROR,
-    GLOG_FATAL
+    GLOG_FATAL,
+    GLOG_NOTEXT
 } glog_level_t;
 
 typedef struct {
@@ -74,6 +75,7 @@ static const char *level_str(glog_level_t lvl) {
         case GLOG_WARNING: return "warning";
         case GLOG_ERROR:   return "error";
         case GLOG_FATAL:   return "fatal error";
+	case GLOG_NOTEXT:  return "";
     }
     return "unknown";
 }
@@ -85,6 +87,7 @@ static const char *level_color(glog_level_t lvl) {
         case GLOG_WARNING: return "\033[1;35m"; /* bold magenta*/
         case GLOG_ERROR:   return "\033[1;31m"; /* bold red    */
         case GLOG_FATAL:   return "\033[1;31m"; /* bold red    */
+	case GLOG_NOTEXT:  return "";
     }
     return "\033[0m";
 }
