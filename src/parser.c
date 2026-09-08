@@ -354,6 +354,26 @@ void parse_char_decl(nu_ast_node_t* root) {
     expect(';', "Expected ';' after declaration");
 }
 
+void parse_assignment_stmt(nu_ast_node_t* parent) {
+    // Current token is IDENTIFIER
+    char varname[64];
+    snprintf(varname, sizeof(varname), "%s", yytext);
+    advance();
+
+    expect('=', "Expected '=' in assignment");
+
+    // Create the assignment AST node
+    nu_ast_node_t* assign_node = newnode(parent, AST_ASSIGN_STMT);
+    
+    // Add target variable node
+    newstrnode(assign_node, AST_IDENT, varname);
+
+    // Parse the RHS expression and attach to assignment node
+    parse_expression(assign_node);
+
+    expect(';', "Expected ';' after assignment");
+}
+
 static void parse_statement(nu_ast_node_t* root) {
     switch (current_tok) {
         case RETURN:
@@ -380,16 +400,28 @@ static void parse_statement(nu_ast_node_t* root) {
             parse_print_stmt(root);
             break;
 
-	case CHAR:
-	    parse_char_decl(root);
-	    break;
-
-	case IDENTIFIER: {
-            parse_expression(root);
-            expect(';', "Expected ';' after statement");
+        case CHAR:
+            parse_char_decl(root);
             break;
-        }
 
+        case IDENTIFIER: {
+            char name[64];
+            snprintf(name, sizeof(name), "%s", yytext);
+            advance();
+
+            if (match('=')) {
+                advance();
+                nu_ast_node_t* assign_node = newnode(root, AST_ASSIGN_STMT);
+                newstrnode(assign_node, AST_IDENT, name);
+                parse_expression(assign_node);
+                expect(';', "Expected ';' after assignment");
+            } else {
+                parse_expression(root);
+                expect(';', "Expected ';' after statement");
+            }
+            break;
+    }
+    
         default: {
             char errm[128];
             snprintf(errm, sizeof(errm),

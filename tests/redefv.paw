@@ -1,0 +1,13 @@
+int num = 20;
+char chr = 'h';
+
+func main() {
+	print(num);
+	print(chr);
+
+	num = 10;
+	chr = 'd';
+
+	print(num);
+	print(chr);
+}

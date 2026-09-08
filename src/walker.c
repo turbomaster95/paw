@@ -262,15 +262,14 @@ void compile_node(nu_ast_node_t *node) {
         }
 
         case AST_FUNC_DECL: {
-	    bool prev_in_func = in_function;
+            bool prev_in_func = in_function;
             in_function = true;
-	    for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
-     	      if (child->type == AST_BLOCK) {
-                  compile_node(child);
-              }
-            }	 
-
-	    in_function = prev_in_func;	    
+            for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+                if (child->type == AST_BLOCK) {
+                    compile_node(child);
+                }
+            }
+            in_function = prev_in_func;	    
             break;
         }
 
@@ -358,7 +357,7 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
-	case AST_CHAR_DECL:
+        case AST_CHAR_DECL:
         case AST_INT_DECL:
         case AST_CONST_DECL: {
             nu_ast_node_t *var_node = node->first_child;
@@ -404,6 +403,37 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
+        case AST_ASSIGN_STMT: {
+            nu_ast_node_t *var_node = node->first_child;
+            nu_ast_node_t *val_node = var_node ? var_node->next_sibling : NULL;
+
+            if (!var_node || !val_node) break;
+
+            const char *var_name = var_node->val.str;
+            if (!var_name && var_node->first_child) {
+                var_name = var_node->first_child->val.str;
+            }
+
+            if (!var_name) {
+                fprintf(stderr, "Error: Invalid assignment target\n");
+                break;
+            }
+
+            symb *sym = symtab_lookup(SymTable, var_name);
+            if (!sym) {
+                fprintf(stderr, "Error: Undefined variable '%s' in assignment\n", var_name);
+                break;
+            }
+
+            if (sym->scope == SCOPE_GLOBAL) {
+                compile_expr(val_node, R1);
+                sym->val = get_node_value(val_node); 
+            } else {
+                compile_expr(val_node, sym->location);
+            }
+            break;
+        }
+        
         default:
             for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
                 compile_node(child);
