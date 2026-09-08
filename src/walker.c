@@ -97,7 +97,37 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             }
             return target_reg;
         }
-        
+
+        case AST_ASSIGN_STMT: {
+            nu_ast_node_t *var_node = node->first_child;
+            nu_ast_node_t *val_node = var_node ? var_node->next_sibling : NULL;
+
+            if (!var_node || !val_node) return target_reg;
+
+            const char *var_name = var_node->val.str;
+            if (!var_name && var_node->first_child) {
+                var_name = var_node->first_child->val.str;
+            }
+
+            symb *sym = symtab_lookup(SymTable, var_name);
+            if (!sym) {
+                fprintf(stderr, "Error: Undefined variable '%s'\n", var_name ? var_name : "?");
+                return target_reg;
+            }
+
+            if (sym->scope == SCOPE_GLOBAL) {
+                compile_expr(val_node, target_reg);
+                sym->val = get_node_value(val_node);
+		emit(EMIT_MOV(sym->location, target_reg));
+            } else {
+                compile_expr(val_node, sym->location);
+                if (target_reg != sym->location) {
+                    emit(EMIT_MOV(target_reg, sym->location));
+                }
+            }
+            return target_reg;
+        }
+
         case AST_ADD: {
             nu_ast_node_t *left = node->first_child;
             nu_ast_node_t *right = left ? left->next_sibling : NULL;
@@ -154,14 +184,13 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
 
             while (param && arg) {
                 const char *param_name = NULL;
-
-		for (nu_ast_node_t *pchild = param->first_child; pchild != NULL; pchild = pchild->next_sibling) {
-     		   if (pchild->type == AST_PARAM_NAME) {
-	              param_name = pchild->val.str;
-          	      break;
-	           }
-	        }
-
+                for (nu_ast_node_t *pchild = param->first_child; pchild != NULL; pchild = pchild->next_sibling) {
+                    if (pchild->type == AST_PARAM_NAME) {
+                        param_name = pchild->val.str;
+                        break;
+                    }
+                }
+                
                 if (param_name) {
                     symb *sym = symtab_lookup(SymTable, param_name);
                     if (!sym) {
@@ -294,7 +323,7 @@ void compile_node(nu_ast_node_t *node) {
             unescape(val, realfmt, in_len + 1);
             int fmt_id = vm_register_format(realfmt);
 
-	    emit(EMIT_LOAD(R0, fmt_id));
+            emit(EMIT_LOAD(R0, fmt_id));
 
             int count = 0;
             int reg_base = 1;
@@ -309,7 +338,7 @@ void compile_node(nu_ast_node_t *node) {
             break;
         }
 
-	case AST_PRINT_STMT: {
+        case AST_PRINT_STMT: {
             nu_ast_node_t *expr = node->first_child;
             if (!expr) break;
 

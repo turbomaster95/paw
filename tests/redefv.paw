@@ -10,4 +10,8 @@ func main() {
 
 	print(num);
 	print(chr);
+
+	num = num + 1;
+	print(num);
+
 }
