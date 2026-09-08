@@ -1,0 +1,10 @@
+func fnmain(int intg) -> int {
+	return intg + 10;
+}
+
+func main() -> int {
+	int val = 100;
+	int ret = fnmain(val);
+	print(ret);
+	return ret;
+}

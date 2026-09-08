@@ -41,6 +41,8 @@ int errcnt = 0;
 "return"                { return(RETURN); }
 "printf"                { return(PRINTF); }
 "print"                 { return(PRINT); }
+"->"			{ return(RARROW); }
+"<-"			{ return(LARROW); }
 
 {IDENT_HEAD}({IDENT_HEAD}|{DIGIT})* {
     yylval.str_val = strdup(yytext);

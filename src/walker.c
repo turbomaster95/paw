@@ -153,7 +153,15 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *arg = node->first_child;
 
             while (param && arg) {
-                const char *param_name = param->val.str;
+                const char *param_name = NULL;
+
+		for (nu_ast_node_t *pchild = param->first_child; pchild != NULL; pchild = pchild->next_sibling) {
+     		   if (pchild->type == AST_PARAM_NAME) {
+	              param_name = pchild->val.str;
+          	      break;
+	           }
+	        }
+
                 if (param_name) {
                     symb *sym = symtab_lookup(SymTable, param_name);
                     if (!sym) {
@@ -254,16 +262,15 @@ void compile_node(nu_ast_node_t *node) {
         }
 
         case AST_FUNC_DECL: {
-            if (node->val.str && strcmp(node->val.str, "main") == 0) {
-                in_function = true;
+	    bool prev_in_func = in_function;
+            in_function = true;
+	    for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
+     	      if (child->type == AST_BLOCK) {
+                  compile_node(child);
+              }
+            }	 
 
-                for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
-                    if (child->type == AST_BLOCK) {
-                        compile_node(child);
-                    }
-                }
-                in_function = false;
-            }
+	    in_function = prev_in_func;	    
             break;
         }
 

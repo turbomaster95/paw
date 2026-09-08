@@ -278,6 +278,15 @@ void parse_printf_stmt(nu_ast_node_t* parent) {
 
 void parse_block(nu_ast_node_t* parent);
 
+static int parse_type_specifier(nu_ast_node_t* parent) {
+    if (match(INT) || match(CHAR)) {
+        newstrnode(parent, AST_TYPE_SPEC, yytext);
+        advance();
+        return 1;
+    }
+    return 0;
+}
+
 void parse_function_decl(nu_ast_node_t* root) {
     expect(FUNC, "Expected 'func'");
 
@@ -286,18 +295,36 @@ void parse_function_decl(nu_ast_node_t* root) {
     expect(IDENTIFIER, "Expected function name");
 
     nu_ast_node_t* fn_node = newstrnode(root, AST_FUNC_DECL, func_name);
+
     expect('(', "Expected '(' after function name");
     nu_ast_node_t* param_list = newnode(fn_node, AST_PARAM_LIST);
 
     while (!match(')') && current_tok != 0) {
-        if (match(TYPE_INT)) advance();
-        if (match(IDENTIFIER)) {
-            newstrnode(param_list, AST_PARAM, yytext);
-            advance();
+	nu_ast_node_t* param_node = newnode(param_list, AST_PARAM);
+
+	if (!parse_type_specifier(param_node)) {
+            synerr(yylineno, tok_col, "Expected type for parameter");
         }
+
+	if (match(IDENTIFIER)) {
+            newstrnode(param_node, AST_PARAM_NAME, yytext);
+            advance();
+        } else {
+            synerr(yylineno, tok_col, "Expected parameter name after type");
+        }
+
         if (match(',')) advance();
     }
     expect(')', "Expected ')' after parameters");
+
+    if (match(RARROW)) {
+        advance();
+        
+        nu_ast_node_t* ret_type_node = newnode(fn_node, AST_FUNC_RETURN_TYPE);
+        if (!parse_type_specifier(ret_type_node)) {
+            synerr(yylineno, tok_col, "Expected return type after '->'");
+        }
+    }
 
     parse_block(fn_node);
 }
