@@ -41,25 +41,19 @@ static void emit(Instruction inst) {
 
 static int get_node_value(nu_ast_node_t *node) {
     if (!node) return 0;
+
     if (node->type == AST_CONST) {
         if (!node->val.str) return 0;
 
-        char clean[512];
         const char *src = node->val.str;
+        char clean[512];
+        removequotes(src, clean, sizeof(clean));
 
-        char tmp[512];
-        strncpy(tmp, src, sizeof(tmp));
-        while ((tmp[0] == '"' || tmp[0] == '\'') && strlen(tmp) >= 2) {
-            removequotes(tmp, clean, sizeof(clean));
-            if (strcmp(tmp, clean) == 0) break;
-            strcpy(tmp, clean);
+        if (src[0] == '\'') {
+            return (unsigned char)clean[0];
         }
 
-        if (strlen(tmp) == 1) {
-            return (unsigned char)tmp[0];
-        }
-
-        return atoi(tmp);
+        return atoi(clean);
     }
 
     if (node->type == AST_IDENT) {
@@ -67,6 +61,18 @@ static int get_node_value(nu_ast_node_t *node) {
         if (sym && sym->scope == SCOPE_GLOBAL) {
             return sym->val;
         }
+    }
+
+    if (node->type == AST_ADD) {
+        nu_ast_node_t *left = node->first_child;
+        nu_ast_node_t *right = left ? left->next_sibling : NULL;
+        return get_node_value(left) + get_node_value(right);
+    }
+
+    if (node->type == AST_SUB) {
+        nu_ast_node_t *left = node->first_child;
+        nu_ast_node_t *right = left ? left->next_sibling : NULL;
+        return get_node_value(left) - get_node_value(right);
     }
 
     return 0;
