@@ -138,27 +138,91 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
     return NULL;
 }
 
-nu_ast_node_t* parse_expression(nu_ast_node_t* parent) {
-    nu_ast_node_t* left = parse_primary(NULL);
+static int get_tok_precedence(int tok) {
+    switch (tok) {
+        case '|': return 1;                  // Bitwise OR
+        case '^': return 2;                  // Bitwise XOR
+        case '&': return 3;                  // Bitwise AND
+        case '<<':
+        case '>>': return 4;
+        case '+':
+        case '-': return 5;                  // Additive +, -
+        case '*':
+        case '/':
+        case '%': return 6;                  // Multiplicative *, /, %
+        default:  return 0;                  // Not a binary operator
+    }
+}
 
-    while (match('+') || match('-')) {
-        uint32_t op_type = (current_tok == '+') ? AST_ADD : AST_SUB;
+static uint32_t get_ast_op_type(int tok) {
+    switch (tok) {
+        case '+': return AST_ADD;
+	case '-': return AST_SUB;
+        case '*': return AST_MUL;
+	case '/': return AST_DIV;
+	case '%': return AST_MOD;
+        case '&': return AST_BAND; 
+	case '|': return AST_BOR;  
+	case '^': return AST_BXOR;
+        case '<<': return AST_SHL;
+        case '>>': return AST_SHR;
+        default:  return 0;
+    }
+}
+
+nu_ast_node_t* parse_unary(void) {
+    if (current_tok == '-' || current_tok == '~' || current_tok == '!') {
+        int op = current_tok;
+        uint32_t op_type = (op == '-') ? AST_NEGATIVE : (op == '~') ? AST_BNOT : AST_LNOT;
         
-        nu_ast_node_t* op_node = newstrnode(NULL, op_type, yytext);
+        char op_str[2] = {(char)op, '\0'};
+        nu_ast_node_t* op_node = newstrnode(NULL, op_type, op_str);
         advance();
 
-        if (left) {
-            nu_ast_add_child(op_node, left);
+        nu_ast_node_t* operand = parse_unary();
+        if (operand) {
+            nu_ast_add_child(op_node, operand);
         }
-        parse_primary(op_node);
+        return op_node;
+    }
+
+    return parse_primary(NULL);
+}
+
+nu_ast_node_t* parse_expression_prec(int min_prec) {
+    nu_ast_node_t* left = parse_unary();
+
+    while (1) {
+        int prec = get_tok_precedence(current_tok);
+        if (prec < min_prec) break;
+
+        int op_tok = current_tok;
+        uint32_t op_type = get_ast_op_type(op_tok);
+        
+        char op_buf[32];
+        snprintf(op_buf, sizeof(op_buf), "%s", yytext);
+        advance();
+
+        nu_ast_node_t* right = parse_expression_prec(prec + 1);
+
+        nu_ast_node_t* op_node = newstrnode(NULL, op_type, op_buf);
+        if (left)  nu_ast_add_child(op_node, left);
+        if (right) nu_ast_add_child(op_node, right);
+
         left = op_node;
     }
 
-    if (left && parent) {
-        nu_ast_add_child(parent, left);
+    return left;
+}
+
+nu_ast_node_t* parse_expression(nu_ast_node_t* parent) {
+    nu_ast_node_t* expr = parse_expression_prec(1);
+
+    if (expr && parent) {
+        nu_ast_add_child(parent, expr);
     }
 
-    return left;
+    return expr;
 }
 
 void parse_return_stmt(nu_ast_node_t* root) {

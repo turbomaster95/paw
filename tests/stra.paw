@@ -1,0 +1,7 @@
+func main() -> char {
+	char t = "h";
+	int h = "123";
+	char m = t + h;
+	print(m);
+	return m;
+}

@@ -14,10 +14,6 @@
     X(AST_VAR_DECL) \
     X(AST_CONST_DECL) \
     X(AST_CHAR_DECL) \
-    X(AST_ADD) \
-    X(AST_SUB) \
-    X(AST_MUL) \
-    X(AST_DIV) \
     X(AST_FUNC_DECL) \
     X(AST_FUNC_CALL) \
     X(AST_NEGATIVE) \
@@ -28,8 +24,20 @@
     X(AST_PRINT_STMT) \
     X(AST_TYPE_SPEC) \
     X(AST_PARAM_NAME) \
-    X(AST_FUNC_RETURN_TYPE)
-
+    X(AST_FUNC_RETURN_TYPE) \
+    X(AST_ADD) \
+    X(AST_SUB) \
+    X(AST_MUL) \
+    X(AST_DIV) \
+    X(AST_MOD) \
+    X(AST_BAND) \
+    X(AST_BOR) \
+    X(AST_BXOR) \
+    X(AST_SHL) \
+    X(AST_SHR) \
+    X(AST_BNOT) \
+    X(AST_LNOT)
+    
 typedef enum {
 #define DEFINE_ENUM(name) name,
     AST_TYPE_LIST(DEFINE_ENUM)

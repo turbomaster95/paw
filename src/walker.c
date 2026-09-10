@@ -134,32 +134,53 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             return target_reg;
         }
 
-        case AST_ADD: {
-            nu_ast_node_t *left = node->first_child;
-            nu_ast_node_t *right = left ? left->next_sibling : NULL;
-
-            int r_left = target_reg;
-            int r_right = (target_reg + 1 < NUM_REGS) ? target_reg + 1 : NUM_REGS - 1;
-
-            compile_expr(left, r_left);
-            compile_expr(right, r_right);
-
-            emit(EMIT_ADD(target_reg, r_left, r_right));
-            return target_reg;
+	case AST_NEGATIVE: {
+            nu_ast_node_t *operand = node->first_child;
+            if (operand) {
+                compile_expr(operand, target_reg);
+                int zero_reg = current_local_reg++;
+                emit(EMIT_LOAD(zero_reg, 0));
+                emit(EMIT_SUB(target_reg, zero_reg, target_reg));
+                current_local_reg--;
+            }
+            break;
         }
 
-        case AST_SUB: {
+        case AST_ADD:
+        case AST_SUB:
+        case AST_MUL:
+        case AST_DIV:
+        case AST_MOD:
+        case AST_BAND:
+        case AST_BOR:
+        case AST_BXOR:
+        case AST_SHL:
+        case AST_SHR: {
             nu_ast_node_t *left = node->first_child;
             nu_ast_node_t *right = left ? left->next_sibling : NULL;
+            if (!left || !right) break;
 
-            int r_left = target_reg;
-            int r_right = (target_reg + 1 < NUM_REGS) ? target_reg + 1 : NUM_REGS - 1;
+            compile_expr(left, target_reg);
 
-            compile_expr(left, r_left);
-            compile_expr(right, r_right);
+            int temp_reg = current_local_reg++;
+            compile_expr(right, temp_reg);
 
-            emit(EMIT_SUB(target_reg, r_left, r_right));
-            return target_reg;
+            switch (node->type) {
+                case AST_ADD:  emit(EMIT_ADD(target_reg, target_reg, temp_reg)); break;
+                case AST_SUB:  emit(EMIT_SUB(target_reg, target_reg, temp_reg)); break;
+                case AST_MUL:  emit(EMIT_MUL(target_reg, target_reg, temp_reg)); break;
+                case AST_DIV:  emit(EMIT_DIV(target_reg, target_reg, temp_reg)); break;
+                case AST_MOD:  emit(EMIT_MOD(target_reg, target_reg, temp_reg)); break;
+                case AST_BAND: emit(EMIT_BAND(target_reg, target_reg, temp_reg)); break;
+                case AST_BOR:  emit(EMIT_BOR(target_reg, target_reg, temp_reg)); break;
+                case AST_BXOR: emit(EMIT_BXOR(target_reg, target_reg, temp_reg)); break;
+                case AST_SHL:  emit(EMIT_SHL(target_reg, target_reg, temp_reg)); break;
+                case AST_SHR:  emit(EMIT_SHR(target_reg, target_reg, temp_reg)); break;
+                default: break;
+            }
+
+            current_local_reg--;
+            break;
         }
 
         case AST_FUNC_CALL: {
@@ -224,6 +245,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
         default:
             return target_reg;
     }
+    return (int)-1;
 }
 
 void removequotes(const char* in, char* out, size_t out_size) {
@@ -405,7 +427,12 @@ void compile_node(nu_ast_node_t *node) {
                 sym = symtab_lookup(SymTable, var_name);
             }
 
-            if (in_function) {
+	    nu_ast_node_t *init_expr = var_node->next_sibling;
+	    if (init_expr) {
+	        compile_expr(init_expr, sym->location);
+	    }
+
+    	    if (in_function) {
                 sym->scope = SCOPE_LOCAL;
                 sym->location = current_local_reg++;
 

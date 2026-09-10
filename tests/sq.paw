@@ -1,0 +1,8 @@
+func square(int n) {
+    return n * n;
+}
+
+func main() {
+    int result = square(4);
+    print(result);
+}
