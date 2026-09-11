@@ -124,7 +124,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             if (sym->scope == SCOPE_GLOBAL) {
                 compile_expr(val_node, target_reg);
                 sym->val = get_node_value(val_node);
-		emit(EMIT_MOV(sym->location, target_reg));
+                emit(EMIT_MOV(sym->location, target_reg));
             } else {
                 compile_expr(val_node, sym->location);
                 if (target_reg != sym->location) {
@@ -134,13 +134,13 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             return target_reg;
         }
 
-	case AST_NEGATIVE: {
+        case AST_NEGATIVE: {
             nu_ast_node_t *operand = node->first_child;
             if (operand) {
-                compile_expr(operand, target_reg);
-                int zero_reg = current_local_reg++;
-                emit(EMIT_LOAD(zero_reg, 0));
-                emit(EMIT_SUB(target_reg, zero_reg, target_reg));
+                int operand_reg = current_local_reg++;
+                compile_expr(operand, operand_reg);
+                emit(EMIT_LOAD(target_reg, 0));
+                emit(EMIT_SUB(target_reg, target_reg, operand_reg));
                 current_local_reg--;
             }
             break;
@@ -160,26 +160,52 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *right = left ? left->next_sibling : NULL;
             if (!left || !right) break;
 
-            compile_expr(left, target_reg);
+            int left_reg = current_local_reg++;
+            compile_expr(left, left_reg);
 
-            int temp_reg = current_local_reg++;
-            compile_expr(right, temp_reg);
+            int right_reg = current_local_reg++;
+            compile_expr(right, right_reg);
 
+            emit(EMIT_MOV(target_reg, left_reg));
+            
             switch (node->type) {
-                case AST_ADD:  emit(EMIT_ADD(target_reg, target_reg, temp_reg)); break;
-                case AST_SUB:  emit(EMIT_SUB(target_reg, target_reg, temp_reg)); break;
-                case AST_MUL:  emit(EMIT_MUL(target_reg, target_reg, temp_reg)); break;
-                case AST_DIV:  emit(EMIT_DIV(target_reg, target_reg, temp_reg)); break;
-                case AST_MOD:  emit(EMIT_MOD(target_reg, target_reg, temp_reg)); break;
-                case AST_BAND: emit(EMIT_BAND(target_reg, target_reg, temp_reg)); break;
-                case AST_BOR:  emit(EMIT_BOR(target_reg, target_reg, temp_reg)); break;
-                case AST_BXOR: emit(EMIT_BXOR(target_reg, target_reg, temp_reg)); break;
-                case AST_SHL:  emit(EMIT_SHL(target_reg, target_reg, temp_reg)); break;
-                case AST_SHR:  emit(EMIT_SHR(target_reg, target_reg, temp_reg)); break;
+                case AST_ADD:  emit(EMIT_ADD(target_reg, target_reg, right_reg)); break;
+                case AST_SUB:  emit(EMIT_SUB(target_reg, target_reg, right_reg)); break;
+                case AST_MUL:  emit(EMIT_MUL(target_reg, target_reg, right_reg)); break;
+                case AST_DIV:  emit(EMIT_DIV(target_reg, target_reg, right_reg)); break;
+                case AST_MOD:  emit(EMIT_MOD(target_reg, target_reg, right_reg)); break;
+                case AST_BAND: emit(EMIT_BAND(target_reg, target_reg, right_reg)); break;
+                case AST_BOR:  emit(EMIT_BOR(target_reg, target_reg, right_reg)); break;
+                case AST_BXOR: emit(EMIT_BXOR(target_reg, target_reg, right_reg)); break;
+                case AST_SHL:  emit(EMIT_SHL(target_reg, target_reg, right_reg)); break;
+                case AST_SHR:  emit(EMIT_SHR(target_reg, target_reg, right_reg)); break;
                 default: break;
             }
 
             current_local_reg--;
+            break;
+        }
+
+        case AST_BNOT: {
+            nu_ast_node_t *operand = node->first_child;
+            if (operand) {
+                compile_expr(operand, target_reg);
+                emit(EMIT_BNOT(target_reg, target_reg));
+            }
+            break;
+        }
+
+        case AST_LNOT: {
+            nu_ast_node_t *operand = node->first_child;
+            if (operand) {
+                int operand_reg = current_local_reg++;
+                compile_expr(operand, operand_reg);
+        
+                emit(EMIT_LOAD(target_reg, 0));
+                emit(EMIT_CMPI(operand_reg, 0));
+                // Replace with your VM's conditional set/jump logic for logical NOT
+                current_local_reg--;
+            }
             break;
         }
 
@@ -427,11 +453,6 @@ void compile_node(nu_ast_node_t *node) {
                 sym = symtab_lookup(SymTable, var_name);
             }
 
-	    nu_ast_node_t *init_expr = var_node->next_sibling;
-	    if (init_expr) {
-	        compile_expr(init_expr, sym->location);
-	    }
-
     	    if (in_function) {
                 sym->scope = SCOPE_LOCAL;
                 sym->location = current_local_reg++;
@@ -557,12 +578,6 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
     code_buf = NULL;
     in_function = false;
     current_local_reg = 4;
-
-    for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
-        if (child->type == AST_CONST_DECL || child->type == AST_INT_DECL) {
-            compile_node(child);
-        }
-    }
 
     nu_ast_node_t *main_fn = NULL;
     for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
