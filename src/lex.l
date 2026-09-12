@@ -31,7 +31,7 @@ int errcnt = 0;
 
 %%
 "//"[^\n]*              { /* consume single line comment */ }
-"#"[^\n]*               { /* consume preprocessor? / single line comment */ }
+^"#line"[^\n]*        { /* consume preprocessor line marker */ }
 
 "func"                  { return(FUNC); }
 "if"                    { return(IF); }
@@ -83,7 +83,7 @@ L?\"(\\.|[^\"\\\n])*\" {
 \n                      { tok_col = 1; }
 [ \t\v\f]+              { /* Skip whitespace */ }
 
-";"|"="|"+"|"-"|"*"|"/"|"("|")"|"{"|"}"|","|"<"|">"|"!"|"&"|"|"|"%"|"~"|"^"|"<<"|">>" {
+";"|"="|"+"|"-"|"*"|"/"|"("|")"|"{"|"}"|","|"<"|">"|"!"|"&"|"|"|"%"|"~"|"^"|"<<"|">>"|"."|"#" {
     return yytext[0];
 }
 

@@ -18,28 +18,12 @@ static BytecodeBuffer *code_buf = NULL;
 static bool in_function = false;
 static int current_local_reg = 4;
 
-#define MAX_FFI_FUNCTIONS 128
-
-typedef struct {
-    char *name;
-    char *library;
-
-    ffi_signature_t signature;
-
-    uint32_t function_id;
-} paw_ffi_function_t;
-
-static paw_ffi_function_t g_ffi_functions[MAX_FFI_FUNCTIONS];
-static uint32_t g_ffi_function_count = 0;
-
-static const char *g_current_ffi_library = NULL;
-
 // Forward decl's
 int eval_expr(nu_ast_node_t *node);
 void compile_node(nu_ast_node_t *node);
 int compile_expr(nu_ast_node_t *node, int target_reg);
-void removequotes(const char* in, char* out, size_t out_size);
-void unescape(const char* in, char* out, size_t out_sz);
+static void removequotes(const char* in, char* out, size_t out_size);
+static void unescape(const char* in, char* out, size_t out_sz);
 
 static void emit(Instruction inst) {
     if (!code_buf) {
@@ -94,48 +78,61 @@ static int get_node_value(nu_ast_node_t *node) {
     return 0;
 }
 
-static int ffi_type_from_string(const char *type) {
-    if (!type)
-        return -1;
+const char *ffi_library_for_alias(const char *alias) {
+    if (!alias || !g_root_node) {
+        return NULL;
+    }
 
-    if (strcmp(type, "void") == 0)
-        return FFI_TYPE_VOID;
+    for (nu_ast_node_t *child = g_root_node->first_child; child != NULL; child = child->next_sibling) {
+        if (child->type == AST_EXTERN_DECL && child->val.str && strcmp(child->val.str, alias) == 0) {
+            nu_ast_node_t *lib = child->first_child;
 
-    if (strcmp(type, "int") == 0)
-        return FFI_TYPE_INT;
+            if (lib && lib->type == AST_LIB_DECL && lib->val.str) {
+                return lib->val.str;
+            }
+        }
+    }
 
-    if (strcmp(type, "char") == 0)
-        return FFI_TYPE_CHAR;
-
-    if (strcmp(type, "char*") == 0)
-        return FFI_TYPE_CSTRING;
-
-    if (strcmp(type, "void*") == 0)
-        return FFI_TYPE_POINTER;
-
-    return -1;
+    return NULL;
 }
 
-static int register_ffi_function(
-    const char *name,
-    const char *library,
-    const ffi_signature_t *signature
-) {
-    if (!name || !library || !signature)
+int register_runtime_string(const char *str) {
+    if (!str) {
         return -1;
+    }
 
-    if (g_ffi_function_count >= MAX_FFI_FUNCTIONS)
-        return -1;
+    return vm_register_string(str);
+}
 
-    paw_ffi_function_t *fn =
-        &g_ffi_functions[g_ffi_function_count];
+int compile_ffi_argument(nu_ast_node_t *node, int target_reg) {
+    if (!node) {
+        emit(EMIT_LOAD(target_reg, 0));
+        return target_reg;
+    }
 
-    fn->name = strdup(name);
-    fn->library = strdup(library);
-    fn->signature = *signature;
-    fn->function_id = g_ffi_function_count;
+    if (node->type == AST_CONST && node->val.str && node->val.str[0] == '"') {
+        char clean[1024];
+        char real[1024];
 
-    return (int)g_ffi_function_count++;
+        removequotes(node->val.str, clean, sizeof(clean));
+
+        unescape(clean, real, sizeof(real));
+
+        int string_id = register_runtime_string(real);
+
+        if (string_id < 0) {
+            fprintf(stderr, "FFI: failed to register string argument\n");
+
+            emit(EMIT_LOAD(target_reg, 0));
+            return target_reg;
+        }
+
+        emit(EMIT_LOAD(target_reg, string_id));
+
+        return target_reg;
+    }
+
+    return compile_expr(node, target_reg);
 }
 
 int compile_expr(nu_ast_node_t *node, int target_reg) {
@@ -328,13 +325,122 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             return target_reg;
         }
 
+        case AST_FFI_CALL: {
+            /*
+             * AST layout:
+             *
+             * AST_FFI_CALL "ranb64"
+             *   AST_IDENT "ent"
+             *   <argument>
+             *   <argument>
+             */
+
+            nu_ast_node_t *alias_node = node->first_child;
+
+            if (!alias_node || alias_node->type != AST_IDENT || !alias_node->val.str) {
+                fprintf(stderr, "FFI: malformed library call\n");
+
+                emit(EMIT_LOAD(target_reg, 0));
+
+                return target_reg;
+            }
+
+            const char *alias = alias_node->val.str;
+
+            const char *library = ffi_library_for_alias(alias);
+
+            if (!library) {
+                fprintf(stderr, "FFI: unknown library alias '%s'\n", alias);
+
+                emit(EMIT_LOAD(target_reg, 0));
+
+                return target_reg;
+            }
+
+            if (!node->val.str) {
+                fprintf(stderr, "FFI: function has no name\n");
+
+                emit(EMIT_LOAD(target_reg, 0));
+
+                return target_reg;
+            }
+
+            /*
+             * SYS 3:
+             *
+             * R0 = library path/name string index
+             * R1 = symbol string index
+             *
+             * Returns an internal Paw FFI function handle in R0.
+             */
+
+            int library_id = register_runtime_string(library);
+
+            int symbol_id = register_runtime_string(node->val.str);
+
+            if (library_id < 0 || symbol_id < 0) {
+                fprintf(stderr, "FFI: failed to register library metadata\n");
+
+                emit(EMIT_LOAD(target_reg, 0));
+
+                return target_reg;
+            }
+
+            emit(EMIT_LOAD(R0, library_id));
+
+            emit(EMIT_LOAD(R1, symbol_id));
+
+            emit(INST_SYS(3));
+
+            /*
+             * R0 now contains the runtime FFI function ID.
+             * Args start in R1.
+             */
+            nu_ast_node_t *arg = alias_node->next_sibling;
+
+            int argc = 0;
+
+            while (arg && argc < 15) {
+                int reg = R1 + argc;
+
+                compile_ffi_argument(arg, reg);
+
+                argc++;
+                arg = arg->next_sibling;
+            }
+
+            if (arg) {
+                fprintf(stderr, "FFI: too many arguments for VM register set\n");
+                emit(EMIT_LOAD(R0, 0));
+
+                return target_reg;
+            }
+
+            /*
+             * R0 = function ID
+             * R1.. = arguments
+             */
+            emit(INST_SYS(4));
+
+            if (target_reg != R0) {
+                emit(
+                    EMIT_MOV(
+                        target_reg,
+                        R0
+                    )
+                );
+            }
+
+            return target_reg;
+        }
+        
         default:
             return target_reg;
     }
     return (int)-1;
 }
 
-void removequotes(const char* in, char* out, size_t out_size) {
+static void removequotes(const char* in, char* out, size_t out_size) {
     if (!out || out_size == 0) return;
 
     if (!in) { 
@@ -361,7 +467,7 @@ void removequotes(const char* in, char* out, size_t out_size) {
     out[out_size - 1] = '\0';
 }
 
-void unescape(const char* in, char* out, size_t out_sz) {
+static void unescape(const char* in, char* out, size_t out_sz) {
     size_t j = 0;
     for (size_t i = 0; in[i] != '\0' && j + 1 < out_sz; i++) {
         if (in[i] == '\\') {
@@ -420,6 +526,11 @@ void compile_node(nu_ast_node_t *node) {
             compile_expr(node, R0);
             break;
         }
+
+        case AST_EXTERN_DECL:
+        case AST_LIB_DECL:
+            // Stubs
+            break;
 
         case AST_PRINTF_STMT: {
             nu_ast_node_t *fmt_node = node->first_child;

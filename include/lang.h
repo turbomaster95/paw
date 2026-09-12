@@ -38,7 +38,8 @@
     X(AST_BNOT) \
     X(AST_LNOT) \
     X(AST_EXTERN_DECL) \
-    X(AST_LIB_DECL)
+    X(AST_LIB_DECL) \
+    X(AST_FFI_CALL)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

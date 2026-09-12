@@ -1,0 +1,3 @@
+extern name = lib("./libpaw_hello.so");
+
+print(name.hello());

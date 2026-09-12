@@ -55,6 +55,33 @@ void err(const char* msg) {
     exit(EXIT_FAILURE);
 }
 
+static void removequotes(const char* in, char* out, size_t out_size) {
+    if (!out || out_size == 0) return;
+
+    if (!in) { 
+        out[0] = '\0';
+        return;
+    }
+
+    size_t len = strlen(in);
+    if (len >= 2) {
+        char first = in[0];
+        char last  = in[len - 1];
+
+        if ((first == '\'' && last == '\'') || (first == '"' && last == '"')) {
+            size_t inner = len - 2;
+            if (inner >= out_size) inner = out_size - 1;
+
+            memcpy(out, in + 1, inner);
+            out[inner] = '\0';
+            return;
+        }
+    }
+
+    strncpy(out, in, out_size - 1);
+    out[out_size - 1] = '\0';
+}
+
 static void advance(void) {
     current_tok = yylex();
 }
@@ -122,6 +149,7 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
 
             while (!match(')') && current_tok != 0) {
                 parse_expression(call_node);
+
                 if (match(',')) {
                     advance();
                 }
@@ -131,9 +159,44 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
             return call_node;
         }
 
+        if (match('.')) {
+            advance();
+
+            if (!match(IDENTIFIER)) {
+                synerr(yylineno, tok_col, "Expected library function name after '.'");
+            }
+
+            char function_name[64];
+            snprintf(function_name, sizeof(function_name), "%s", yytext);
+
+            advance();
+
+            if (!match('(')) {
+                synerr(yylineno, tok_col, "Expected '(' after library function name");
+            }
+
+            advance();
+
+            nu_ast_node_t *call_node = newstrnode(parent, AST_FFI_CALL, function_name);
+
+            newstrnode(call_node, AST_IDENT, name);
+
+            while (!match(')') && current_tok != 0) {
+                parse_expression(call_node);
+
+                if (match(',')) {
+                    advance();
+                }
+            }
+
+            expect(')', "Expected ')' after library function arguments");
+
+            return call_node;
+        }
+
         return newstrnode(parent, AST_IDENT, name);
     }
-
+    
     synerr(yylineno, 0, "Expected expression");
     return NULL;
 }
@@ -419,27 +482,100 @@ void parse_char_decl(nu_ast_node_t* root) {
 }
 
 void parse_assignment_stmt(nu_ast_node_t* parent) {
-    // Current token is IDENTIFIER
     char varname[64];
     snprintf(varname, sizeof(varname), "%s", yytext);
     advance();
 
     expect('=', "Expected '=' in assignment");
 
-    // Create the assignment AST node
     nu_ast_node_t* assign_node = newnode(parent, AST_ASSIGN_STMT);
     
-    // Add target variable node
     newstrnode(assign_node, AST_IDENT, varname);
 
-    // Parse the RHS expression and attach to assignment node
     parse_expression(assign_node);
 
     expect(';', "Expected ';' after assignment");
 }
 
-static void parse_statement(nu_ast_node_t* root) {
+
+void parse_lib_decl(nu_ast_node_t *parent) {
+    expect(LIB, "Expected 'lib'");
+
+    expect('(', "Expected '(' after 'lib'");
+
+    if (!match(STRING_LITERAL)) {
+        synerr(yylineno, tok_col, "Expected library path or library name");
+    }
+
+    char library[1024];
+    char clean[1024];
+    removequotes(yytext, clean, sizeof(clean));
+    snprintf(library, sizeof(library), "%s", clean);
+
+    printf("The libname is this: %s\n", clean);
+
+    nu_ast_node_t *lib_node = newstrnode(parent, AST_LIB_DECL, library);
+
+    advance();
+
+    expect(')', "Expected ')' after library path");
+
+    (void)lib_node;
+}
+
+void parse_extern_decl(nu_ast_node_t *root) {
+    expect(EXTERN, "Expected 'extern'");
+
+    if (!match(IDENTIFIER)) {
+        synerr(yylineno, tok_col, "Expected library alias after 'extern'");
+    }
+
+    char alias[64];
+    snprintf(alias, sizeof(alias), "%s", yytext);
+
+    advance();
+
+    expect('=', "Expected '=' after extern library alias");
+
+    if (!match(LIB)) {
+        synerr(yylineno, tok_col, "Expected lib(...) after extern alias");
+    }
+
+    nu_ast_node_t *extern_node = newstrnode(root, AST_EXTERN_DECL, alias);
+
+    parse_lib_decl(extern_node);
+
+    expect(';', "Expected ';' after extern library declaration");
+
+    symb *existing = symtab_lookup(SymTable, alias);
+
+    if (existing) {
+        synerr(yylineno, tok_col, "Duplicate library alias");
+    }
+
+     // the alias itself is not a normal runtime var.
+     // it's  a namespace/library symbol.
+    symb *sym = symtab_add(SymTable, alias, VAR_STRING);
+
+    if (!sym) {
+        err("Failed to register library alias");
+    }
+
+    sym->is_ffi = 1;
+
+    nu_ast_node_t *lib_node = extern_node->first_child;
+
+    if (lib_node && lib_node->val.str) {
+        sym->ffi_library = nu_strdup(lib_node->val.str);
+    }
+}
+
+ static void parse_statement(nu_ast_node_t* root) {
     switch (current_tok) {
+        case EXTERN:
+            parse_extern_decl(root);
+            break;
+            
         case RETURN:
             parse_return_stmt(root);
             break;
