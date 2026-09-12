@@ -20,7 +20,8 @@ enum TokenTypes {
     PRINT,
     RARROW, // ->
     LARROW,  // <-
-    EXTERN
+    EXTERN,
+    LIB
 };
 
 typedef union {
@@ -42,12 +43,41 @@ typedef enum {
     SCOPE_LOCAL
 } VarScope;
 
+typedef enum {
+    FFI_TYPE_VOID = 0,
+    FFI_TYPE_INT,
+    FFI_TYPE_CHAR,
+    FFI_TYPE_CSTRING,
+    FFI_TYPE_POINTER
+} ffi_type_t;
+
+#define FFI_MAX_ARGS 16
+
+typedef struct {
+    ffi_type_t return_type;
+    ffi_type_t args[FFI_MAX_ARGS];
+    uint32_t arg_count;
+    int variadic;
+} ffi_signature_t;
+
 struct Symb {
     char *name;
+
     var_type_t type;
+
     VarScope scope;
+
     int location;
+
     int val;
+
+    int is_ffi;
+
+    char *ffi_library;
+    char *ffi_symbol;
+
+    ffi_signature_t ffi_signature;
+
     struct Symb *next;
 };
 

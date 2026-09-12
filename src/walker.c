@@ -18,6 +18,22 @@ static BytecodeBuffer *code_buf = NULL;
 static bool in_function = false;
 static int current_local_reg = 4;
 
+#define MAX_FFI_FUNCTIONS 128
+
+typedef struct {
+    char *name;
+    char *library;
+
+    ffi_signature_t signature;
+
+    uint32_t function_id;
+} paw_ffi_function_t;
+
+static paw_ffi_function_t g_ffi_functions[MAX_FFI_FUNCTIONS];
+static uint32_t g_ffi_function_count = 0;
+
+static const char *g_current_ffi_library = NULL;
+
 // Forward decl's
 int eval_expr(nu_ast_node_t *node);
 void compile_node(nu_ast_node_t *node);
@@ -76,6 +92,50 @@ static int get_node_value(nu_ast_node_t *node) {
     }
 
     return 0;
+}
+
+static int ffi_type_from_string(const char *type) {
+    if (!type)
+        return -1;
+
+    if (strcmp(type, "void") == 0)
+        return FFI_TYPE_VOID;
+
+    if (strcmp(type, "int") == 0)
+        return FFI_TYPE_INT;
+
+    if (strcmp(type, "char") == 0)
+        return FFI_TYPE_CHAR;
+
+    if (strcmp(type, "char*") == 0)
+        return FFI_TYPE_CSTRING;
+
+    if (strcmp(type, "void*") == 0)
+        return FFI_TYPE_POINTER;
+
+    return -1;
+}
+
+static int register_ffi_function(
+    const char *name,
+    const char *library,
+    const ffi_signature_t *signature
+) {
+    if (!name || !library || !signature)
+        return -1;
+
+    if (g_ffi_function_count >= MAX_FFI_FUNCTIONS)
+        return -1;
+
+    paw_ffi_function_t *fn =
+        &g_ffi_functions[g_ffi_function_count];
+
+    fn->name = strdup(name);
+    fn->library = strdup(library);
+    fn->signature = *signature;
+    fn->function_id = g_ffi_function_count;
+
+    return (int)g_ffi_function_count++;
 }
 
 int compile_expr(nu_ast_node_t *node, int target_reg) {

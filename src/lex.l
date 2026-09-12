@@ -43,6 +43,8 @@ int errcnt = 0;
 "print"                 { return(PRINT); }
 "->"			{ return(RARROW); }
 "<-"			{ return(LARROW); }
+"extern"		{ return(EXTERN); }
+"lib"			{ return(LIB); }
 
 {IDENT_HEAD}({IDENT_HEAD}|{DIGIT})* {
     yylval.str_val = strdup(yytext);
