@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 4.1)
 
 set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
 
@@ -30,6 +30,21 @@ include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+    include(FetchContent)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+    FetchContent_Declare(
+        dyncall
+        URL https://dyncall.org/r1.4/dyncall-1.4.tar.gz
+    )
+    FetchContent_MakeAvailable(dyncall)
+
+    include_directories(
+        ${dyncall_SOURCE_DIR}/dyncall
+        ${dyncall_SOURCE_DIR}/dynload
+    )
+endif()
+
 find_package(FLEX REQUIRED)
 flex_target(PawLexer src/lex.l ${CMAKE_CURRENT_BINARY_DIR}/lex.yy.c)
 
@@ -49,4 +64,9 @@ file(GLOB PAWV_SRCS "src/vm/*.c")
 add_executable(pawv
     ${PAWV_SRCS}
 )
-target_link_libraries(pawv PRIVATE nu_static)
+
+if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+    target_link_libraries(pawv PRIVATE nu_static dyncall_s dynload_s)
+else()
+    target_link_libraries(pawv PRIVATE nu_static)
+endif()

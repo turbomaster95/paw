@@ -17,7 +17,7 @@ typedef int16_t  i16;
 typedef int32_t  i32;
 typedef int64_t  i64;
 
-#define MAX_REGS 30
+#define MAX_REGS 16
 #define UF_REGS (MAX_REGS - 1)
 #define MAX_STACK_SIZE 512
 

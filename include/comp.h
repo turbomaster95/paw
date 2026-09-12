@@ -19,7 +19,8 @@ enum TokenTypes {
     PRINTF,
     PRINT,
     RARROW, // ->
-    LARROW  // <-
+    LARROW,  // <-
+    EXTERN
 };
 
 typedef union {
