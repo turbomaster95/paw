@@ -15,16 +15,16 @@ func main() {
 
     int prec_mul = a + b * 3;  // Expected: 27
     
-    // int prec_paren = (a + b) * 3; // Expected: 51
+    int prec_paren = (a + b) * 3; // Expected: 51
 
     int res_band = a & b;      // Expected: 4  (0b0100)
     int res_bor  = a | b;      // Expected: 13 (0b1101)
     int res_bxor = a ^ b;      // Expected: 9  (0b1001)
 
-    //int res_shl  = b << 2;     // Expected: 20 (5 * 4)
-    //int res_shr  = a >> 1;     // Expected: 6  (12 / 2)
+    int res_shl  = b << 2;     // Expected: 20 (5 * 4)
+    int res_shr  = a >> 1;     // Expected: 6  (12 / 2)
 
-    //int combo = a * 2 >> 1 & 15 + -b; // Expected: 7
+    int combo = a * 2 >> 1 & 15 + -b; // Expected: 7
 
     print(res_add);
     print(res_sub);
@@ -36,11 +36,11 @@ func main() {
     print(res_lnot1);
     print(res_lnot2);
     print(prec_mul);
-//    print(prec_paren);
+    print(prec_paren);
     print(res_band);
     print(res_bor);
     print(res_bxor);
-//    print(res_shl);
-//    print(res_shr);
-//    print(combo);
+    print(res_shl);
+    print(res_shr);
+    print(combo);
 }

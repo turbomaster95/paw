@@ -11,6 +11,7 @@
 #include <dyncall.h>
 #include <dynload.h>
 #include <pawffi.h>
+#include <lson.h>
 
 #define NEED_BASENAME
 #define NEED_FORMAT
@@ -20,6 +21,7 @@ nu_mm_t *g_mm = NULL;
 char backing[1024 * 1024 * 8];
 char *current_filename = NULL;
 DCCallVM *g_vm_ffi = NULL;
+LsonTranslator *g_translator = NULL;
 
 #define MAX_PAW_LIBRARIES 64
 #define MAX_PAW_FUNCTIONS 512
@@ -117,7 +119,7 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
     }
 
     if (g_library_count >= MAX_PAW_LIBRARIES) {
-        fprintf(stderr, "FFI error: maximum number of loaded modules (%d) reached\n", MAX_PAW_LIBRARIES);
+        fprintf(stderr, _("FFI error: maximum number of loaded modules (%d) reached\n"), MAX_PAW_LIBRARIES);
         return NULL;
     }
 
@@ -125,9 +127,9 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
 
     if (!resolved) {
         if (is_paw_library_name(requested)) {
-            fprintf(stderr, "FFI error: module '%s' was not found in the Paw module search paths\n", requested);
+            fprintf(stderr, _("FFI error: module '%s' was not found in the Paw module search paths\n"), requested);
         } else {
-            fprintf(stderr, "FFI error: module '%s' was not found\n", requested);
+            fprintf(stderr, _("FFI error: module '%s' was not found\n"), requested);
         }
 
         return NULL;
@@ -136,7 +138,7 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
     DLLib *handle = dlLoadLibrary(resolved);
 
     if (!handle) {
-        fprintf(stderr, "FFI error: failed to load module '%s'\n", resolved);
+        fprintf(stderr, _("FFI error: failed to load module '%s'\n"), resolved);
         free(resolved);
         return NULL;
     }
@@ -144,7 +146,7 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
     void *info_symbol = dlFindSymbol(handle, "paw_library_info");
 
     if (!info_symbol) {
-        fprintf(stderr, "FFI error: module '%s' does not export paw_library_info\n", resolved);
+        fprintf(stderr, _("FFI error: module '%s' does not export paw_library_info\n"), resolved);
         dlFreeLibrary(handle);
         free(resolved);
         return NULL;
@@ -154,14 +156,14 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
     const paw_library_t *info = info_fn();
 
     if (!info) {
-        fprintf(stderr, "FFI error: module '%s' returned NULL metadata\n", resolved);
+        fprintf(stderr, _("FFI error: module '%s' returned NULL metadata\n"), resolved);
         dlFreeLibrary(handle);
         free(resolved);
         return NULL;
     }
 
     if (info->abi_version != PAW_FFI_ABI_VERSION) {
-        fprintf(stderr, "FFI error: module '%s' has incompatible Paw FFI ABI\n", resolved);
+        fprintf(stderr, _("FFI error: module '%s' has incompatible Paw FFI ABI\n"), resolved);
         fprintf(stderr, "  module ABI: %u\n", info->abi_version);
         fprintf(stderr, "  runtime ABI: %u\n", PAW_FFI_ABI_VERSION);
         dlFreeLibrary(handle);
@@ -170,7 +172,7 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
     }
 
     if (!info->functions && info->function_count != 0) {
-        fprintf(stderr, "FFI error: module '%s' has a NULL function table\n", resolved);
+        fprintf(stderr, _("FFI error: module '%s' has a NULL function table\n"), resolved);
         dlFreeLibrary(handle);
         free(resolved);
         return NULL;
@@ -180,28 +182,28 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
         const paw_ffi_function_t *fn = &info->functions[i];
 
         if (!fn->name || !*fn->name) {
-            fprintf(stderr, "FFI error: module '%s' contains a function with no name\n", resolved);
+            fprintf(stderr, _("FFI error: module '%s' contains a function with no name\n"), resolved);
             dlFreeLibrary(handle);
             free(resolved);
             return NULL;
         }
 
         if (!fn->address) {
-            fprintf(stderr, "FFI error: module '%s' function '%s' has a NULL address\n", resolved, fn->name);
+            fprintf(stderr, _("FFI error: module '%s' function '%s' has a NULL address\n"), resolved, fn->name);
             dlFreeLibrary(handle);
             free(resolved);
             return NULL;
         }
 
         if (fn->arg_count > 15) {
-            fprintf(stderr, "FFI error: module '%s' function '%s' has %u arguments; Paw supports at most 15\n", resolved, fn->name, fn->arg_count);
+            fprintf(stderr, _("FFI error: module '%s' function '%s' has %u arguments; Paw supports at most 15\n"), resolved, fn->name, fn->arg_count);
             dlFreeLibrary(handle);
             free(resolved);
             return NULL;
         }
 
         if (!ffi_type_valid((paw_ffi_type_t)fn->return_type)) {
-            fprintf(stderr, "FFI error: module '%s' function '%s' has invalid return type %u\n", resolved, fn->name, fn->return_type);
+            fprintf(stderr, _("FFI error: module '%s' function '%s' has invalid return type %u\n"), resolved, fn->name, fn->return_type);
             dlFreeLibrary(handle);
             free(resolved);
             return NULL;
@@ -209,7 +211,7 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
 
         for (uint32_t a = 0; a < fn->arg_count; ++a) {
             if (!ffi_type_valid((paw_ffi_type_t)fn->args[a]) || fn->args[a] == PAW_FFI_VOID) {
-                fprintf(stderr, "FFI error: module '%s' function '%s' has invalid argument type %u at argument %u\n", resolved, fn->name, fn->args[a], a + 1);
+                fprintf(stderr, _("FFI error: module '%s' function '%s' has invalid argument type %u at argument %u\n"), resolved, fn->name, fn->args[a], a + 1);
                 dlFreeLibrary(handle);
                 free(resolved);
                 return NULL;
@@ -307,7 +309,7 @@ static uintptr_t ffi_call(VM *vm, const paw_ffi_function_t *fn) {
 
     for (uint32_t i = 0; i < fn->arg_count; ++i) {
         if (i >= 15) {
-            fprintf(stderr, "FFI error: '%s' has too many arguments\n", fn->name ? fn->name : "?");
+            fprintf(stderr, _("FFI error: '%s' has too many arguments\n"), fn->name ? fn->name : "?");
             return 0;
         }
 
@@ -345,7 +347,7 @@ static uintptr_t ffi_call(VM *vm, const paw_ffi_function_t *fn) {
             int id = VM_register_str(vm, result_string);
 
             if (id < 0) {
-                fprintf(stderr, "FFI error: failed to register C-string return value from '%s'\n", fn->name ? fn->name : "?");
+                fprintf(stderr, _("FFI error: failed to register C-string return value from '%s'\n"), fn->name ? fn->name : "?");
                 result = 0;
                 break;
             }
@@ -355,7 +357,7 @@ static uintptr_t ffi_call(VM *vm, const paw_ffi_function_t *fn) {
         }
 
         default:
-            fprintf(stderr, "FFI error: unsupported return type %u\n", fn->return_type);
+            fprintf(stderr, _("FFI error: unsupported return type %u\n"), fn->return_type);
             return 0;
     }
 
@@ -384,11 +386,11 @@ static paw_ffi_type_t unpack_ffi_type(uint64_t packed, uint32_t index) {
 
 static void ffi_error_call(paw_runtime_function_t *runtime_fn, const char *message) {
     if (!runtime_fn || !runtime_fn->library || !runtime_fn->function) {
-        fprintf(stderr, "FFI error: %s\n", message);
+        fprintf(stderr, _("FFI error: %s\n"), message);
         return;
     }
 
-    fprintf(stderr, "FFI error: %s.%s()\n", runtime_fn->library->info && runtime_fn->library->info->name ? runtime_fn->library->info->name : runtime_fn->library->requested_name, runtime_fn->function->name ? runtime_fn->function->name : "?");
+    fprintf(stderr, _("FFI error: %s.%s()\n"), runtime_fn->library->info && runtime_fn->library->info->name ? runtime_fn->library->info->name : runtime_fn->library->requested_name, runtime_fn->function->name ? runtime_fn->function->name : "?");
     fprintf(stderr, "  %s\n", message);
 }
 
@@ -399,7 +401,7 @@ static int ffi_check_types(VM *vm, paw_runtime_function_t *runtime_fn) {
     uint64_t packed = 0;
 
     if (!unpack_ffi_types(vm, &argc, &packed)) {
-        fprintf(stderr, "FFI error: malformed type-check frame\n");
+        fprintf(stderr, _("FFI error: malformed type-check frame\n"));
         return 0;
     }
 
@@ -456,7 +458,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
             const char *symbol_name = VM_get_string(vm, vm->regs[1]);
 
             if (!library_name || !symbol_name) {
-                fprintf(stderr, "FFI error: invalid module or function name\n");
+                fprintf(stderr, _("FFI error: invalid module or function name\n"));
                 vm->regs[0] = 0;
                 vm->is_running = 0;
                 break;
@@ -473,14 +475,14 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
             const paw_ffi_function_t *function = find_function(library, symbol_name);
 
             if (!function) {
-                fprintf(stderr, "FFI error: function '%s' was not found in module '%s'\n", symbol_name, library_name);
+                fprintf(stderr, _("FFI error: function '%s' was not found in module '%s'\n"), symbol_name, library_name);
                 vm->regs[0] = 0;
                 vm->is_running = 0;
                 break;
             }
 
             if (function->arg_count > 15) {
-                fprintf(stderr, "FFI error: function '%s' in module '%s' has %u arguments; Paw supports at most 15\n", symbol_name, library_name, function->arg_count);
+                fprintf(stderr, _("FFI error: function '%s' in module '%s' has %u arguments; Paw supports at most 15\n"), symbol_name, library_name, function->arg_count);
                 vm->regs[0] = 0;
                 vm->is_running = 0;
                 break;
@@ -489,7 +491,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
             uint32_t function_id = register_runtime_function(library, function);
 
             if (!function_id) {
-                fprintf(stderr, "FFI error: runtime function table exhausted while loading '%s'\n", symbol_name);
+                fprintf(stderr, _("FFI error: runtime function table exhausted while loading '%s'\n"), symbol_name);
                 vm->regs[0] = 0;
                 vm->is_running = 0;
                 break;
@@ -504,7 +506,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
             paw_runtime_function_t *runtime_fn = get_runtime_function(function_id);
 
             if (!runtime_fn) {
-                fprintf(stderr, "FFI error: invalid function ID %u during argument validation\n", function_id);
+                fprintf(stderr, _("FFI error: invalid function ID %u during argument validation\n"), function_id);
                 vm->is_running = 0;
                 break;
             }
@@ -522,7 +524,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
             paw_runtime_function_t *runtime_fn = get_runtime_function(function_id);
 
             if (!runtime_fn) {
-                fprintf(stderr, "FFI error: invalid function ID %u\n", function_id);
+                fprintf(stderr, _("FFI error: invalid function ID %u\n"), function_id);
                 vm->regs[0] = 0;
                 vm->is_running = 0;
                 break;
@@ -558,7 +560,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
                     break;
 
                 default:
-                    fprintf(stderr, "FFI error: cannot print return type %u\n", g_last_ffi_type);
+                    fprintf(stderr, _("FFI error: cannot print return type %u\n"), g_last_ffi_type);
                     break;
             }
 
@@ -566,7 +568,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
         }
 
         default:
-            fprintf(stderr, "Fault: Unhandled System Call %u\n", sys_code);
+            fprintf(stderr, _("Fault: Unhandled System Call %u\n"), sys_code);
             vm->is_running = 0;
             break;
     }
@@ -584,18 +586,23 @@ static void cleanup_paw_libraries(void) {
 }
 
 int main(int argc, char **argv) {
+    g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
+
+    if (!g_mm) {
+        glog_log(NULL, 0, 0, GLOG_FATAL, _("Fatal: Failed to allocate memory arena!"));
+        return EXIT_FAILURE;
+    }
+
+    LsonTranslator lson;
+    lson_init(&lson, g_mm);
+
+    g_translator = &lson;
+
     glog_init();
     glog_config.use_color = 1;
 
     if (argc < 2) {
-        glog_log(NULL, 0, 0, GLOG_INFO, "Usage: %s <bytecode.pawv>\n", get_basename(argv[0]));
-        return EXIT_FAILURE;
-    }
-
-    g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
-
-    if (!g_mm) {
-        glog_log(NULL, 0, 0, GLOG_FATAL, "Fatal: Failed to allocate memory arena!");
+        glog_log(NULL, 0, 0, GLOG_INFO, _("Usage: %s <bytecode.pawv>\n"), get_basename(argv[0]));
         return EXIT_FAILURE;
     }
 
@@ -603,7 +610,7 @@ int main(int argc, char **argv) {
     VM *vm = nu_alloc(g_mm, sizeof(VM));
 
     if (!mem || !vm) {
-        glog_log(NULL, 0, 0, GLOG_FATAL, "Fatal: Out of memory!");
+        glog_log(NULL, 0, 0, GLOG_FATAL, _("Fatal: Out of memory!"));
         nu_mm_destroy(g_mm);
         return EXIT_FAILURE;
     }
@@ -613,7 +620,7 @@ int main(int argc, char **argv) {
     g_vm_ffi = dcNewCallVM(4096);
 
     if (!g_vm_ffi) {
-        glog_log(NULL, 0, 0, GLOG_FATAL, "Fatal: Failed to create dyncall VM!");
+        glog_log(NULL, 0, 0, GLOG_FATAL, _("Fatal: Failed to create dyncall VM!"));
         nu_mm_destroy(g_mm);
         return EXIT_FAILURE;
     }
@@ -627,7 +634,7 @@ int main(int argc, char **argv) {
     int ret = VM_run_file(current_filename, mem, vm, load_vaddr);
 
     if (ret != 0) {
-        glog_log(NULL, 0, 0, GLOG_FATAL, "Couldn't run bytecode file: %s, errcode: %d", current_filename, ret);
+        glog_log(NULL, 0, 0, GLOG_FATAL, _("Couldn't run bytecode file: %s, errcode: %d"), current_filename, ret);
         cleanup_paw_libraries();
         dcFree(g_vm_ffi);
         nu_mm_destroy(g_mm);

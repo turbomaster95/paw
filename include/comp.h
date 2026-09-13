@@ -20,6 +20,8 @@ enum TokenTypes {
     PRINT,
     RARROW,
     LARROW,
+    SHR,
+    SHL,
     EXTERN,
     LIB
 };

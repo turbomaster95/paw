@@ -13,7 +13,7 @@ project(paw C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_compile_options(-Wall -Wextra -pedantic -Wno-unused)
+add_compile_options(-Wall -Wextra -Wno-unused)
 
 if("${PAW_TARGET}" STREQUAL "wasi")
     add_compile_definitions(
@@ -53,13 +53,15 @@ add_subdirectory(lib/nu)
 file(GLOB PAWC_SRCS "src/*.c")
 list(REMOVE_ITEM PAWC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/prep.c")
 
+add_compile_options(-include ${CMAKE_CURRENT_SOURCE_DIR}/include/prel.h)
+
 add_executable(pawc
     ${PAWC_SRCS}
     ${FLEX_PawLexer_OUTPUTS}
 )
 target_link_libraries(pawc PRIVATE nu_static)
 
-file(GLOB PAWV_SRCS "src/vm/*.c")
+file(GLOB PAWV_SRCS "src/vm/*.c" "src/lson.c")
 
 add_executable(pawv
     ${PAWV_SRCS}

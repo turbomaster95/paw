@@ -24,34 +24,35 @@ nu_ast_node_t *g_root_node = NULL;
 
 symbt* SymTable;
 
+nu_ast_node_t* parse_expression_prec(int min_prec);
 nu_ast_node_t* parse_expression(nu_ast_node_t* parent);
 
 const char *tokname(int token) {
     switch (token) {
-        case FUNC:           return "FUNC";
-        case IF:             return "IF";
-        case INT:            return "INT";
-        case RETURN:         return "RETURN";
-        case IDENTIFIER:     return "IDENTIFIER";
-        case CONSTANT:       return "CONSTANT";
-        case STRING_LITERAL: return "STRING_LITERAL";
+        case FUNC:           return _("FUNC");
+        case IF:             return _("IF");
+        case INT:            return _("INT");
+        case RETURN:         return _("RETURN");
+        case IDENTIFIER:     return _("IDENTIFIER");
+        case CONSTANT:       return _("CONSTANT");
+        case STRING_LITERAL: return _("STRING_LITERAL");
         default:
             if (token > 0 && token < 256) {
                 static char buf[2] = {0};
                 buf[0] = (char)token;
                 return buf;
             }
-            return "UNKNOWN";
+            return _("UNKNOWN");
     }
 }
 
 void synerr(int line, int col, const char* msg) {
-    glog_log(current_filename, line, col, GLOG_ERROR, "Syntax Error: %s", msg);
+    glog_log(current_filename, line, col, GLOG_ERROR, _("Syntax Error: %s"), msg);
     exit(EXIT_FAILURE);
 }
 
 void err(const char* msg) {
-    glog_log(current_filename, 0, 0, GLOG_ERROR, "Error: %s", msg);
+    glog_log(current_filename, 0, 0, GLOG_ERROR, _("Error: %s"), msg);
     exit(EXIT_FAILURE);
 }
 
@@ -118,11 +119,14 @@ static nu_ast_node_t *newstrnode(nu_ast_node_t *parent, uint32_t type, const cha
 }
 
 nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
-    if (match('-')) {
+    if (match('(')) {
         advance();
-        nu_ast_node_t* neg_node = newnode(parent, AST_NEGATIVE);
-        parse_primary(neg_node);
-        return neg_node;
+        nu_ast_node_t* expr = parse_expression_prec(1);
+        expect(')', _("Expected ')' after parenthesized expression"));
+        if (parent && expr) {
+            nu_ast_add_child(parent, expr);
+        }
+        return expr;
     }
 
     if (match(CONSTANT)) {
@@ -155,7 +159,7 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
                 }
             }
 
-            expect(')', "Expected ')' after function arguments");
+            expect(')', _("Expected ')' after function arguments"));
             return call_node;
         }
 
@@ -163,7 +167,7 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
             advance();
 
             if (!match(IDENTIFIER)) {
-                synerr(yylineno, tok_col, "Expected library function name after '.'");
+                synerr(yylineno, tok_col, _("Expected library function name after '.'"));
             }
 
             char function_name[64];
@@ -172,7 +176,7 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
             advance();
 
             if (!match('(')) {
-                synerr(yylineno, tok_col, "Expected '(' after library function name");
+                synerr(yylineno, tok_col, _("Expected '(' after library function name"));
             }
 
             advance();
@@ -189,7 +193,7 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
                 }
             }
 
-            expect(')', "Expected ')' after library function arguments");
+            expect(')', _("Expected ')' after library function arguments"));
 
             return call_node;
         }
@@ -197,7 +201,7 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
         return newstrnode(parent, AST_IDENT, name);
     }
     
-    synerr(yylineno, 0, "Expected expression");
+    synerr(yylineno, 0, _("Expected expression"));
     return NULL;
 }
 
@@ -206,8 +210,8 @@ static int get_tok_precedence(int tok) {
         case '|': return 1;                  // Bitwise OR
         case '^': return 2;                  // Bitwise XOR
         case '&': return 3;                  // Bitwise AND
-        case '<<':
-        case '>>': return 4;
+        case SHL:
+        case SHR: return 4;
         case '+':
         case '-': return 5;                  // Additive +, -
         case '*':
@@ -227,8 +231,8 @@ static uint32_t get_ast_op_type(int tok) {
         case '&': return AST_BAND; 
 	case '|': return AST_BOR;  
 	case '^': return AST_BXOR;
-        case '<<': return AST_SHL;
-        case '>>': return AST_SHR;
+        case SHL: return AST_SHL;
+        case SHR: return AST_SHR;
         default:  return 0;
     }
 }
@@ -289,7 +293,7 @@ nu_ast_node_t* parse_expression(nu_ast_node_t* parent) {
 }
 
 void parse_return_stmt(nu_ast_node_t* root) {
-    expect(RETURN, "Expected 'return'");
+    expect(RETURN, _("Expected 'return'"));
 
     nu_ast_node_t* ret_node = newnode(root, AST_RETURN_STMT);
     
@@ -297,16 +301,16 @@ void parse_return_stmt(nu_ast_node_t* root) {
         parse_expression(ret_node);
     }
     
-    expect(';', "Expected ';' after return value");
+    expect(';', _("Expected ';' after return value"));
 }
 
 void parse_integer_decl(nu_ast_node_t* root) {
-    expect(INT, "Expected 'int'");
+    expect(INT, _("Expected 'int'"));
 
     nu_ast_node_t* int_node = newnode(root, AST_INT_DECL);
 
     if (!match(IDENTIFIER)) {
-        synerr(yylineno, tok_col, "Expected an identifier for the integer!");
+        synerr(yylineno, tok_col, _("Expected an identifier for the integer!"));
     }
 
     char* varname = nu_strdup(yytext);
@@ -319,7 +323,7 @@ void parse_integer_decl(nu_ast_node_t* root) {
         parse_expression(int_node);
     }
 
-    expect(';', "Expected ';' after declaration");
+    expect(';', _("Expected ';' after declaration"));
 }
 
 static int is_type_token(int token) {
@@ -327,10 +331,10 @@ static int is_type_token(int token) {
 }
 
 void parse_constvar_decl(nu_ast_node_t* root) {
-    expect(CONST, "Expected 'const'");
+    expect(CONST, _("Expected 'const'"));
 
     if (!is_type_token(current_tok)) {
-        synerr(yylineno, tok_col, "Expected type after 'const'");
+        synerr(yylineno, tok_col, _("Expected type after 'const'"));
     }
 
     var_type_t var_type;
@@ -346,7 +350,7 @@ void parse_constvar_decl(nu_ast_node_t* root) {
     nu_ast_node_t* const_node = newnode(root, AST_CONST_DECL);
 
     if (!match(IDENTIFIER)) {
-        synerr(yylineno, tok_col, "Expected an identifier for the constant!");
+        synerr(yylineno, tok_col, _("Expected an identifier for the constant!"));
     }
 
     char* varname = nu_strdup(yytext);
@@ -359,15 +363,15 @@ void parse_constvar_decl(nu_ast_node_t* root) {
         advance();
         parse_expression(const_node);
     } else {
-        synerr(yylineno, tok_col, "Constants must be initialized at declaration");
+        synerr(yylineno, tok_col, _("Constants must be initialized at declaration"));
     }
 
-    expect(';', "Expected ';' after declaration");
+    expect(';', _("Expected ';' after declaration"));
 }
 
 void parse_print_stmt(nu_ast_node_t* parent) {
-    expect(PRINT, "Expected 'print'");
-    expect('(', "Expected '(' after 'print'");
+    expect(PRINT, _("Expected 'print'"));
+    expect('(', _("Expected '(' after 'print'"));
 
     if (match(STRING_LITERAL)) {
        nu_ast_node_t* print_node = newnode(parent, AST_PRINT_STMT);
@@ -378,16 +382,16 @@ void parse_print_stmt(nu_ast_node_t* parent) {
        parse_expression(print_node);
     }
 
-    expect(')', "Expected ')' after 'print' statement");
-    expect(';', "Expected ';' after print statement");
+    expect(')', _("Expected ')' after 'print' statement"));
+    expect(';', _("Expected ';' after print statement"));
 }
 
 void parse_printf_stmt(nu_ast_node_t* parent) {
-    expect(PRINTF, "Expected 'printf'");
-    expect('(', "Expected '(' after 'printf'");
+    expect(PRINTF, _("Expected 'printf'"));
+    expect('(', _("Expected '(' after 'printf'"));
 
     if (!match(STRING_LITERAL)) {
-        synerr(yylineno, tok_col, "Expected format string in printf");
+        synerr(yylineno, tok_col, _("Expected format string in printf"));
     }
 
     nu_ast_node_t* printf_node = newnode(parent, AST_PRINTF_STMT);
@@ -399,8 +403,8 @@ void parse_printf_stmt(nu_ast_node_t* parent) {
         parse_expression(printf_node);
     }
 
-    expect(')', "Expected ')' after printf arguments");
-    expect(';', "Expected ';' after printf statement");
+    expect(')', _("Expected ')' after printf arguments"));
+    expect(';', _("Expected ';' after printf statement"));
 }
 
 void parse_block(nu_ast_node_t* parent);
@@ -415,41 +419,41 @@ static int parse_type_specifier(nu_ast_node_t* parent) {
 }
 
 void parse_function_decl(nu_ast_node_t* root) {
-    expect(FUNC, "Expected 'func'");
+    expect(FUNC, _("Expected 'func'"));
 
     char func_name[64];
     snprintf(func_name, sizeof(func_name), "%s", yytext);
-    expect(IDENTIFIER, "Expected function name");
+    expect(IDENTIFIER, _("Expected function name"));
 
     nu_ast_node_t* fn_node = newstrnode(root, AST_FUNC_DECL, func_name);
 
-    expect('(', "Expected '(' after function name");
+    expect('(', _("Expected '(' after function name"));
     nu_ast_node_t* param_list = newnode(fn_node, AST_PARAM_LIST);
 
     while (!match(')') && current_tok != 0) {
 	nu_ast_node_t* param_node = newnode(param_list, AST_PARAM);
 
 	if (!parse_type_specifier(param_node)) {
-            synerr(yylineno, tok_col, "Expected type for parameter");
+            synerr(yylineno, tok_col, _("Expected type for parameter"));
         }
 
 	if (match(IDENTIFIER)) {
             newstrnode(param_node, AST_PARAM_NAME, yytext);
             advance();
         } else {
-            synerr(yylineno, tok_col, "Expected parameter name after type");
+            synerr(yylineno, tok_col, _("Expected parameter name after type"));
         }
 
         if (match(',')) advance();
     }
-    expect(')', "Expected ')' after parameters");
+    expect(')', _("Expected ')' after parameters"));
 
     if (match(RARROW)) {
         advance();
         
         nu_ast_node_t* ret_type_node = newnode(fn_node, AST_FUNC_RETURN_TYPE);
         if (!parse_type_specifier(ret_type_node)) {
-            synerr(yylineno, tok_col, "Expected return type after '->'");
+            synerr(yylineno, tok_col, _("Expected return type after '->'"));
         }
     }
 
@@ -457,12 +461,12 @@ void parse_function_decl(nu_ast_node_t* root) {
 }
 
 void parse_char_decl(nu_ast_node_t* root) {
-    expect(CHAR, "Expected 'char'");
+    expect(CHAR, _("Expected 'char'"));
 
     nu_ast_node_t* char_node = newnode(root, AST_CHAR_DECL);
 
     if (!match(IDENTIFIER)) {
-        synerr(yylineno, tok_col, "Expected an identifier for the char!");
+        synerr(yylineno, tok_col, _("Expected an identifier for the char!"));
         return;
     }
 
@@ -478,7 +482,7 @@ void parse_char_decl(nu_ast_node_t* root) {
         parse_expression(char_node);
     }
 
-    expect(';', "Expected ';' after declaration");
+    expect(';', _("Expected ';' after declaration"));
 }
 
 void parse_assignment_stmt(nu_ast_node_t* parent) {
@@ -486,7 +490,7 @@ void parse_assignment_stmt(nu_ast_node_t* parent) {
     snprintf(varname, sizeof(varname), "%s", yytext);
     advance();
 
-    expect('=', "Expected '=' in assignment");
+    expect('=', _("Expected '=' in assignment"));
 
     nu_ast_node_t* assign_node = newnode(parent, AST_ASSIGN_STMT);
     
@@ -494,17 +498,17 @@ void parse_assignment_stmt(nu_ast_node_t* parent) {
 
     parse_expression(assign_node);
 
-    expect(';', "Expected ';' after assignment");
+    expect(';', _("Expected ';' after assignment"));
 }
 
 
 void parse_lib_decl(nu_ast_node_t *parent) {
-    expect(LIB, "Expected 'lib'");
+    expect(LIB, _("Expected 'lib'"));
 
-    expect('(', "Expected '(' after 'lib'");
+    expect('(', _("Expected '(' after 'lib'"));
 
     if (!match(STRING_LITERAL)) {
-        synerr(yylineno, tok_col, "Expected library path or library name");
+        synerr(yylineno, tok_col, _("Expected library path or library name"));
     }
 
     char library[1024];
@@ -512,22 +516,22 @@ void parse_lib_decl(nu_ast_node_t *parent) {
     removequotes(yytext, clean, sizeof(clean));
     snprintf(library, sizeof(library), "%s", clean);
 
-    printf("The libname is this: %s\n", clean);
+    printf(_("The libname is this: %s\n"), clean);
 
     nu_ast_node_t *lib_node = newstrnode(parent, AST_LIB_DECL, library);
 
     advance();
 
-    expect(')', "Expected ')' after library path");
+    expect(')', _("Expected ')' after library path"));
 
     (void)lib_node;
 }
 
 void parse_extern_decl(nu_ast_node_t *root) {
-    expect(EXTERN, "Expected 'extern'");
+    expect(EXTERN, _("Expected 'extern'"));
 
     if (!match(IDENTIFIER)) {
-        synerr(yylineno, tok_col, "Expected library alias after 'extern'");
+        synerr(yylineno, tok_col, _("Expected library alias after 'extern'"));
     }
 
     char alias[64];
@@ -535,22 +539,22 @@ void parse_extern_decl(nu_ast_node_t *root) {
 
     advance();
 
-    expect('=', "Expected '=' after extern library alias");
+    expect('=', _("Expected '=' after extern library alias"));
 
     if (!match(LIB)) {
-        synerr(yylineno, tok_col, "Expected lib(...) after extern alias");
+        synerr(yylineno, tok_col, _("Expected lib(...) after extern alias"));
     }
 
     nu_ast_node_t *extern_node = newstrnode(root, AST_EXTERN_DECL, alias);
 
     parse_lib_decl(extern_node);
 
-    expect(';', "Expected ';' after extern library declaration");
+    expect(';', _("Expected ';' after extern library declaration"));
 
     symb *existing = symtab_lookup(SymTable, alias);
 
     if (existing) {
-        synerr(yylineno, tok_col, "Duplicate library alias");
+        synerr(yylineno, tok_col, _("Duplicate library alias"));
     }
 
      // the alias itself is not a normal runtime var.
@@ -558,7 +562,7 @@ void parse_extern_decl(nu_ast_node_t *root) {
     symb *sym = symtab_add(SymTable, alias, VAR_STRING);
 
     if (!sym) {
-        err("Failed to register library alias");
+        err(_("Failed to register library alias"));
     }
 
     sym->is_ffi = 1;
@@ -619,13 +623,13 @@ void parse_extern_decl(nu_ast_node_t *root) {
 
                 parse_expression(assign_node);
 
-                expect(';', "Expected ';' after assignment");
+                expect(';', _("Expected ';' after assignment"));
             } else if (match('.')) {
                 advance();
 
                 if (!match(IDENTIFIER)) {
                     synerr(yylineno, tok_col,
-                       "Expected library function name after '.'");
+                       _("Expected library function name after '.'"));
                 }
 
                 char function_name[64];
@@ -634,7 +638,7 @@ void parse_extern_decl(nu_ast_node_t *root) {
 
                 if (!match('(')) {
                     synerr(yylineno, tok_col,
-                       "Expected '(' after library function name");
+                       _("Expected '(' after library function name"));
                 }
 
                 advance();
@@ -650,15 +654,15 @@ void parse_extern_decl(nu_ast_node_t *root) {
                         advance();
                     } else if (!match(')')) {
                         synerr(yylineno, tok_col,
-                           "Expected ',' or ')' in library function arguments");
+                           _("Expected ',' or ')' in library function arguments"));
                     }
                 }
 
-                expect(')', "Expected ')' after library function arguments");
-                expect(';', "Expected ';' after library function call");
+                expect(')', _("Expected ')' after library function arguments"));
+                expect(';', _("Expected ';' after library function call"));
             } else {
                 newstrnode(root, AST_IDENT, name);
-                expect(';', "Expected ';' after statement");
+                expect(';', _("Expected ';' after statement"));
             }
 
             break;
@@ -667,7 +671,7 @@ void parse_extern_decl(nu_ast_node_t *root) {
         default: {
             char errm[128];
             snprintf(errm, sizeof(errm),
-                 "Unexpected token '%s' (\"%s\")\n", tokname(current_tok), yytext);
+                 _("Unexpected token '%s' (\"%s\")\n"), tokname(current_tok), yytext);
             synerr(yylineno, tok_col, errm);
             advance(); /* Skip token to prevent infinite loop */
             break;
@@ -676,14 +680,14 @@ void parse_extern_decl(nu_ast_node_t *root) {
 }
 
 void parse_block(nu_ast_node_t* parent) {
-    expect('{', "Expected '{' to start block");
+    expect('{', _("Expected '{' to start block"));
     nu_ast_node_t* block_node = newnode(parent, AST_BLOCK);
 
     while (!match('}') && current_tok != 0) {
         parse_statement(block_node);
     }
 
-    expect('}', "Expected '}' at end of block");
+    expect('}', _("Expected '}' at end of block"));
 }
 
 void print_ast(nu_ast_node_t *node, int depth) {
@@ -720,7 +724,7 @@ void parse(const char* output_file) {
     print_ast(root, 0);
 
     if (!output_file) {
-	err("Output File is NULL!");
+	err(_("Output File is NULL!"));
     }
 
     const char ext[] = ".pawv";

@@ -6,6 +6,7 @@
 #include <etc.h>
 #include <nu.h>
 #include <glog.h>
+#include <lson.h>
 
 #define NEED_BASENAME
 #include <common.h>
@@ -18,6 +19,7 @@ extern FILE *yyin;
 /* globals */
 nu_mm_t *g_mm = NULL;
 nu_ast_t *g_ast = NULL;
+LsonTranslator *g_translator = NULL;
 
 YYSTYPE yylval;
 char *current_filename = NULL;
@@ -42,25 +44,35 @@ char *get_noext_filename(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        glog_log(NULL, 0, 0, GLOG_NOTEXT, "Usage: %s [options] <source_file>", get_basename(argv[0]));
-	glog_log(NULL, 0, 0, GLOG_NOTEXT, "Options:");
-	glog_log(NULL, 0, 0, GLOG_NOTEXT, " -D<name>       Defines a preprocessor variable");
-	glog_log(NULL, 0, 0, GLOG_NOTEXT, " -I<path>       Includes a folder into the global list");
+    g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
+    if (!g_mm) {
+        fprintf(stderr, "Fatal: Failed to allocate memory arena.\n");
         return EXIT_FAILURE;
+    }
+
+    LsonTranslator lson;
+    lson_init(&lson, g_mm);
+
+    g_translator = &lson;
+
+    if (!lson_load_file(&lson, "locales/catgirl.son")) {
+        fprintf(stderr, "%s", lson_get_last_error(&lson));
+    } else {
+        printf("Loaded locale: %s", lson_tr(&lson, "MSG_WELCOME"));
+    }
+
+    if (argc < 2) {
+        glog_log(NULL, 0, 0, GLOG_NOTEXT, _("Usage: %s [options] <source_file>"), get_basename(argv[0]));
+	glog_log(NULL, 0, 0, GLOG_NOTEXT, _("Options:"));
+	glog_log(NULL, 0, 0, GLOG_NOTEXT, _(" -D<name>       Defines a preprocessor variable"));
+	glog_log(NULL, 0, 0, GLOG_NOTEXT, _(" -I<path>       Includes a folder into the global list"));
+        goto fail;
     }
 
     glog_init();
     glog_config.show_source = true;
     glog_config.use_color = 1;
     glog_config.prefix = "paw";
-
-
-    g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
-    if (!g_mm) {
-        fprintf(stderr, "Fatal: Failed to allocate memory arena.\n");
-        return EXIT_FAILURE;
-    }
 
     init_predefined();
 
@@ -83,13 +95,13 @@ int main(int argc, char **argv) {
         } else if (argv[i][0] != '-') {
             source_file = argv[i];
         } else {
-            fprintf(stderr, "paw: unknown option: %s\n", argv[i]);
+            fprintf(stderr, _("paw: unknown option: %s\n"), argv[i]);
             return EXIT_FAILURE;
         }
     }
 
     if (!source_file) {
-        glog_log(NULL, 0, 0, GLOG_FATAL, "No input source file specified.");
+        glog_log(NULL, 0, 0, GLOG_FATAL, _("No input source file specified."));
         return EXIT_FAILURE;
     }
 
@@ -104,7 +116,7 @@ int main(int argc, char **argv) {
 
     yyin = fmemopen(output.lines.data, output.lines.len, "r");
     if (!yyin) {
-        glog_log(current_filename, 0, 0, GLOG_FATAL, "Failed to open preprocessor memory stream.");
+        glog_log(current_filename, 0, 0, GLOG_FATAL, _("Failed to open preprocessor memory stream."));
         out_free(&output);
         goto fail;
     }
@@ -114,7 +126,7 @@ int main(int argc, char **argv) {
     out_free(&output);
 
     if (!g_ast || !g_ast->root) {
-        glog_log(current_filename, 0, 0, GLOG_FATAL, "Parsing failed.");
+        glog_log(current_filename, 0, 0, GLOG_FATAL, _("Parsing failed."));
         goto fail;
     }
 

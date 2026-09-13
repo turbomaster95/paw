@@ -58,9 +58,9 @@ static const char *AST_TYPE_NAMES[] = {
 
 static const char *ast_type_name(uint32_t type) {
     if (type < AST_TYPE_COUNT) {
-        return AST_TYPE_NAMES[type];
+        return _(AST_TYPE_NAMES[type]);
     }
-    return "AST_UNKNOWN";
+    return _("AST_UNKNOWN");
 }
 
 #endif // NEED_TYPENAME

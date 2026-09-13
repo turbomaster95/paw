@@ -43,6 +43,8 @@ int errcnt = 0;
 "print"                 { return(PRINT); }
 "->"			{ return(RARROW); }
 "<-"			{ return(LARROW); }
+"<<"			{ return(SHL); }
+">>"			{ return(SHR); }
 "extern"		{ return(EXTERN); }
 "lib"			{ return(LIB); }
 
@@ -83,13 +85,13 @@ L?\"(\\.|[^\"\\\n])*\" {
 \n                      { tok_col = 1; }
 [ \t\v\f]+              { /* Skip whitespace */ }
 
-";"|"="|"+"|"-"|"*"|"/"|"("|")"|"{"|"}"|","|"<"|">"|"!"|"&"|"|"|"%"|"~"|"^"|"<<"|">>"|"."|"#" {
+";"|"="|"+"|"-"|"*"|"/"|"("|")"|"{"|"}"|","|"<"|">"|"!"|"&"|"|"|"%"|"~"|"^"|"."|"#" {
     return yytext[0];
 }
 
 . {
     char msg[64];
-    snprintf(msg, sizeof(msg), "unknown character '%c' (0x%02x)\n", yytext[0], (unsigned char)yytext[0]);
+    snprintf(msg, sizeof(msg), _("unknown character '%c' (0x%02x)\n"), yytext[0], (unsigned char)yytext[0]);
     error(msg);
     errcnt++;
     exit(EXIT_FAILURE);
@@ -100,10 +102,10 @@ L?\"(\\.|[^\"\\\n])*\" {
 
 void error(const char *s)
 {
-    fprintf(stderr, "Error: %i:%i:%s %s", yylineno, tok_col, current_filename ? current_filename : "<input>", s);
+    fprintf(stderr, _("Error: %i:%i:%s %s"), yylineno, tok_col, current_filename ? current_filename : "<input>", s);
 }
 
 void complain(void)
 {
-    printf("W: Unmatched Characters!\n");
+    printf(_("W: Unmatched Characters!\n"));
 }

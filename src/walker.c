@@ -118,7 +118,7 @@ static int compile_ffi_argument(nu_ast_node_t *node, int target_reg) {
         int string_id = register_runtime_string(real);
 
         if (string_id < 0) {
-            fprintf(stderr, "FFI: failed to register string argument\n");
+            fprintf(stderr, _("FFI: failed to register string argument\n"));
             emit(EMIT_LOAD(target_reg, 0));
             return target_reg;
         }
@@ -202,7 +202,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             symb *sym = symtab_lookup(SymTable, node->val.str);
 
             if (!sym) {
-                fprintf(stderr, "Error: Undefined variable '%s'\n", node->val.str);
+                fprintf(stderr, _("Error: Undefined variable '%s'\n"), node->val.str);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -226,7 +226,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             symb *sym = symtab_lookup(SymTable, var_name);
 
             if (!sym) {
-                fprintf(stderr, "Error: Undefined variable '%s'\n", var_name ? var_name : "?");
+                fprintf(stderr, _("Error: Undefined variable '%s'\n"), var_name ? var_name : "?");
                 return target_reg;
             }
 
@@ -335,7 +335,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             }
 
             if (!target_fn) {
-                fprintf(stderr, "Runtime Error: Undefined function '%s'\n", node->val.str);
+                fprintf(stderr, _("Runtime Error: Undefined function '%s'\n"), node->val.str);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -389,7 +389,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *alias_node = node->first_child;
 
             if (!alias_node || alias_node->type != AST_IDENT || !alias_node->val.str) {
-                fprintf(stderr, "FFI error: malformed module call\n");
+                fprintf(stderr, _("FFI error: malformed module call\n"));
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -398,13 +398,13 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             const char *library = ffi_library_for_alias(alias);
 
             if (!library) {
-                fprintf(stderr, "FFI error: module alias '%s' has no library declaration\n", alias);
+                fprintf(stderr, _("FFI error: module alias '%s' has no library declaration\n"), alias);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
 
             if (!node->val.str) {
-                fprintf(stderr, "FFI error: module '%s' call has no function name\n", library);
+                fprintf(stderr, _("FFI error: module '%s' call has no function name\n"), library);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -413,7 +413,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             int symbol_id = register_runtime_string(node->val.str);
 
             if (library_id < 0 || symbol_id < 0) {
-                fprintf(stderr, "FFI error: failed to register metadata for '%s.%s()'\n", alias, node->val.str);
+                fprintf(stderr, _("FFI error: failed to register metadata for '%s.%s()'\n"), alias, node->val.str);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -439,7 +439,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
 
             while (arg) {
                 if (argc > 15) {
-                    fprintf(stderr, "FFI error: '%s.%s()' has too many arguments\n", alias, node->val.str);
+                    fprintf(stderr, _("FFI error: '%s.%s()' has too many arguments\n"), alias, node->val.str);
                     emit(EMIT_LOAD(target_reg, 0));
                     return target_reg;
                 }
@@ -447,7 +447,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
                 int arg_reg = current_local_reg++;
 
                 if (arg_reg >= R15) {
-                    fprintf(stderr, "FFI error: expression for '%s.%s()' uses too many temporary registers\n", alias, node->val.str);
+                    fprintf(stderr, _("FFI error: expression for '%s.%s()' uses too many temporary registers\n"), alias, node->val.str);
                     current_local_reg--;
                     emit(EMIT_LOAD(target_reg, 0));
                     return target_reg;
@@ -717,14 +717,14 @@ void compile_node(nu_ast_node_t *node) {
             if (!var_name && var_node->first_child) var_name = var_node->first_child->val.str;
 
             if (!var_name) {
-                fprintf(stderr, "Error: Invalid assignment target\n");
+                fprintf(stderr, _("Error: Invalid assignment target\n"));
                 break;
             }
 
             symb *sym = symtab_lookup(SymTable, var_name);
 
             if (!sym) {
-                fprintf(stderr, "Error: Undefined variable '%s' in assignment\n", var_name);
+                fprintf(stderr, _("Error: Undefined variable '%s' in assignment\n"), var_name);
                 break;
             }
 
@@ -750,7 +750,7 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
     FILE *f = fopen(filename, "wb");
 
     if (!f) {
-        perror("Failed to open output bytecode file");
+        perror(_("Failed to open output bytecode file"));
         return false;
     }
 
