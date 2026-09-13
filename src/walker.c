@@ -559,8 +559,8 @@ void compile_node(nu_ast_node_t *node) {
 
                 int fmt_id = vm_register_format(fmt_str);
 
-                emit(EMIT_LOAD(R0, fmt_id));
                 compile_expr(expr, R1);
+                emit(EMIT_LOAD(R0, fmt_id));
                 emit(INST_SYS(2));
             }
 
