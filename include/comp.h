@@ -18,8 +18,8 @@ enum TokenTypes {
     CONST,
     PRINTF,
     PRINT,
-    RARROW, // ->
-    LARROW,  // <-
+    RARROW,
+    LARROW,
     EXTERN,
     LIB
 };
@@ -27,7 +27,7 @@ enum TokenTypes {
 typedef union {
     int64_t int_val;
     double float_val;
-    const char* str_val;
+    const char *str_val;
     struct nu_ast_node *node;
 } YYSTYPE;
 
@@ -62,22 +62,14 @@ typedef struct {
 
 struct Symb {
     char *name;
-
     var_type_t type;
-
     VarScope scope;
-
     int location;
-
     int val;
-
     int is_ffi;
-
     char *ffi_library;
     char *ffi_symbol;
-
     ffi_signature_t ffi_signature;
-
     struct Symb *next;
 };
 
@@ -87,12 +79,11 @@ typedef struct symbol_table {
     symb *head;
 } symbt;
 
-extern symbt* SymTable;
+extern symbt *SymTable;
 
 symb *symtab_add(symbt *table, const char *name, var_type_t type);
-
 symb *symtab_lookup(symbt *table, const char *name);
 
 extern YYSTYPE yylval;
 
-#endif // COMP_H
+#endif

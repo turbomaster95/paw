@@ -1,14 +1,14 @@
 #include <pawffi.h>
 
-static const char *hello(void) {
-    return "Hello from FFI!";
+static int hello(void) {
+    return 42;
 }
 
 static const paw_ffi_function_t functions[] = {
     {
         .name = "hello",
         .address = (void *)hello,
-        .return_type = PAW_FFI_CSTRING,
+        .return_type = PAW_FFI_INT,
         .arg_count = 0,
         .args = { 0 },
         .variadic = 0
