@@ -342,7 +342,7 @@ static uintptr_t ffi_call(VM *vm, const paw_ffi_function_t *fn) {
                 break;
             }
 
-            int id = vm_register_string(result_string);
+            int id = VM_register_str(vm, result_string);
 
             if (id < 0) {
                 fprintf(stderr, "FFI error: failed to register C-string return value from '%s'\n", fn->name ? fn->name : "?");
@@ -369,12 +369,11 @@ static int unpack_ffi_types(VM *vm, uint32_t *argc, uint64_t *types) {
     if (!vm || !argc || !types) return 0;
     if (vm->SP + 3 > MAX_STACK_SIZE) return 0;
 
-    *argc = vm->stack[vm->SP];
-    uint32_t low = vm->stack[vm->SP + 1];
-    uint32_t high = vm->stack[vm->SP + 2];
+    uint32_t high = vm->stack[vm->SP++];
+    uint32_t low  = vm->stack[vm->SP++];
+    *argc          = vm->stack[vm->SP++];
 
     *types = (uint64_t)low | ((uint64_t)high << 32);
-    vm->SP += 3;
 
     return 1;
 }

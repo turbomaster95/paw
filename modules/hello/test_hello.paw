@@ -1,5 +1,5 @@
 extern name = lib("./libpaw_hello.so");
 
-// print(name.add(20, 22));
+print(name.add(20, 22));
 print(name.greet("Deva"));
-// name.hello();
+name.hello();
