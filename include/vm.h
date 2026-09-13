@@ -28,6 +28,14 @@
 #define R14 14
 #define R15 15
 
+#define PAW_SYS_PUTCHAR      0
+#define PAW_SYS_PRINT_STRING 1
+#define PAW_SYS_PRINTF       2
+#define PAW_SYS_FFI_LOOKUP   3
+#define PAW_SYS_FFI_CALL     4
+#define PAW_SYS_FFI_CHECK    5
+#define PAW_SYS_FFI_PRINT    6
+
 typedef Inst Instruction;
 
 typedef struct {
@@ -96,5 +104,4 @@ typedef struct {
 
 int32_t run_paw_vm(VM *vm, Memory *mem, size_t prog_len);
 
-#endif // PAWV_H
-
+#endif

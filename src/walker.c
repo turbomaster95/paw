@@ -7,6 +7,7 @@
 #include <comp.h>
 #include <lang.h>
 #include <vm.h>
+#include <pawffi.h>
 
 #define NEED_FORMAT
 #include <common.h>
@@ -17,6 +18,8 @@ extern nu_mm_t *g_mm;
 static BytecodeBuffer *code_buf = NULL;
 static bool in_function = false;
 static int current_local_reg = 4;
+
+#define FFI_TYPE_UNKNOWN 7
 
 int eval_expr(nu_ast_node_t *node);
 void compile_node(nu_ast_node_t *node);
@@ -127,6 +130,64 @@ static int compile_ffi_argument(nu_ast_node_t *node, int target_reg) {
     return compile_expr(node, target_reg);
 }
 
+static int ffi_expr_type(nu_ast_node_t *node) {
+    if (!node) return FFI_TYPE_UNKNOWN;
+
+    switch (node->type) {
+        case AST_CONST:
+            if (!node->val.str) return FFI_TYPE_UNKNOWN;
+            if (node->val.str[0] == '"') return PAW_FFI_CSTRING;
+            if (node->val.str[0] == '\'') return PAW_FFI_CHAR;
+            return PAW_FFI_INT;
+
+        case AST_IDENT: {
+            symb *sym = symtab_lookup(SymTable, node->val.str);
+
+            if (!sym) return FFI_TYPE_UNKNOWN;
+
+            if (sym->type == VAR_CHAR) return PAW_FFI_CHAR;
+
+            return PAW_FFI_INT;
+        }
+
+        case AST_NEGATIVE:
+        case AST_ADD:
+        case AST_SUB:
+        case AST_MUL:
+        case AST_DIV:
+        case AST_MOD:
+        case AST_BAND:
+        case AST_BOR:
+        case AST_BXOR:
+        case AST_SHL:
+        case AST_SHR:
+        case AST_BNOT:
+        case AST_LNOT:
+            return PAW_FFI_INT;
+
+        case AST_FFI_CALL:
+            return FFI_TYPE_UNKNOWN;
+
+        default:
+            return FFI_TYPE_UNKNOWN;
+    }
+}
+
+static uint64_t ffi_pack_types(nu_ast_node_t *first_arg, uint32_t *argc_out) {
+    uint64_t packed = 0;
+    uint32_t argc = 0;
+
+    for (nu_ast_node_t *arg = first_arg; arg != NULL && argc < 15; arg = arg->next_sibling) {
+        uint64_t type = (uint64_t)(ffi_expr_type(arg) & 0x7);
+        packed |= type << (argc * 3);
+        argc++;
+    }
+
+    if (argc_out) *argc_out = argc;
+
+    return packed;
+}
+
 int compile_expr(nu_ast_node_t *node, int target_reg) {
     if (!node) return target_reg;
 
@@ -234,6 +295,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             }
 
             current_local_reg--;
+            current_local_reg--;
             return target_reg;
         }
 
@@ -327,7 +389,7 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *alias_node = node->first_child;
 
             if (!alias_node || alias_node->type != AST_IDENT || !alias_node->val.str) {
-                fprintf(stderr, "FFI: malformed library call\n");
+                fprintf(stderr, "FFI error: malformed module call\n");
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -336,13 +398,13 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             const char *library = ffi_library_for_alias(alias);
 
             if (!library) {
-                fprintf(stderr, "FFI: unknown library alias '%s'\n", alias);
+                fprintf(stderr, "FFI error: module alias '%s' has no library declaration\n", alias);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
 
             if (!node->val.str) {
-                fprintf(stderr, "FFI: function has no name\n");
+                fprintf(stderr, "FFI error: module '%s' call has no function name\n", library);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -351,31 +413,57 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             int symbol_id = register_runtime_string(node->val.str);
 
             if (library_id < 0 || symbol_id < 0) {
-                fprintf(stderr, "FFI: failed to register library metadata\n");
+                fprintf(stderr, "FFI error: failed to register metadata for '%s.%s()'\n", alias, node->val.str);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
 
             emit(EMIT_LOAD(R0, library_id));
             emit(EMIT_LOAD(R1, symbol_id));
-            emit(INST_SYS(3));
+            emit(EMIT_SYS(PAW_SYS_FFI_LOOKUP));
+
+            emit(EMIT_PUSH(R0));
 
             nu_ast_node_t *arg = alias_node->next_sibling;
-            int argc = 0;
+            uint32_t argc = 0;
+            uint64_t packed_types = ffi_pack_types(arg, &argc);
+            uint32_t packed_low = (uint32_t)packed_types;
+            uint32_t packed_high = (uint32_t)(packed_types >> 32);
+
+            emit(EMIT_PUSHI(argc));
+            emit(EMIT_PUSHI(packed_low));
+            emit(EMIT_PUSHI(packed_high));
+            emit(EMIT_SYS(PAW_SYS_FFI_CHECK));
+
+            arg = alias_node->next_sibling;
 
             while (arg) {
-                if (argc >= 15) {
-                    fprintf(stderr, "FFI: too many arguments for VM register set\n");
-                    emit(EMIT_LOAD(R0, 0));
+                if (argc > 15) {
+                    fprintf(stderr, "FFI error: '%s.%s()' has too many arguments\n", alias, node->val.str);
+                    emit(EMIT_LOAD(target_reg, 0));
                     return target_reg;
                 }
 
-                compile_ffi_argument(arg, R1 + argc);
-                argc++;
+                int arg_reg = current_local_reg++;
+
+                if (arg_reg >= R15) {
+                    fprintf(stderr, "FFI error: expression for '%s.%s()' uses too many temporary registers\n", alias, node->val.str);
+                    current_local_reg--;
+                    emit(EMIT_LOAD(target_reg, 0));
+                    return target_reg;
+                }
+
+                compile_ffi_argument(arg, arg_reg);
+                emit(EMIT_PUSH(arg_reg));
+                current_local_reg--;
+
                 arg = arg->next_sibling;
             }
 
-            emit(INST_SYS(4));
+            for (int i = (int)argc; i >= 1; --i) emit(EMIT_POP(R0 + i));
+
+            emit(EMIT_POP(R0));
+            emit(EMIT_SYS(PAW_SYS_FFI_CALL));
 
             if (target_reg != R0) emit(EMIT_MOV(target_reg, R0));
 
@@ -471,6 +559,10 @@ void compile_node(nu_ast_node_t *node) {
             compile_expr(node, R0);
             break;
 
+        case AST_FFI_CALL:
+            compile_expr(node, R0);
+            break;
+
         case AST_EXTERN_DECL:
         case AST_LIB_DECL:
             break;
@@ -510,7 +602,7 @@ void compile_node(nu_ast_node_t *node) {
                 arg = arg->next_sibling;
             }
 
-            emit(INST_SYS(2));
+            emit(EMIT_SYS(PAW_SYS_PRINTF));
             break;
         }
 
@@ -518,6 +610,12 @@ void compile_node(nu_ast_node_t *node) {
             nu_ast_node_t *expr = node->first_child;
 
             if (!expr) break;
+
+            if (expr->type == AST_FFI_CALL) {
+                compile_expr(expr, R0);
+                emit(EMIT_SYS(PAW_SYS_FFI_PRINT));
+                break;
+            }
 
             if (expr->type == AST_CONST && expr->val.str && expr->val.str[0] == '"') {
                 size_t orig_len = strlen(expr->val.str);
@@ -541,7 +639,7 @@ void compile_node(nu_ast_node_t *node) {
                     int str_id = vm_register_string(realfmt);
 
                     emit(EMIT_LOAD(R0, str_id));
-                    emit(INST_SYS(1));
+                    emit(EMIT_SYS(PAW_SYS_PRINT_STRING));
                 }
 
                 if (val) nu_free(g_mm, val);
@@ -561,7 +659,7 @@ void compile_node(nu_ast_node_t *node) {
 
                 compile_expr(expr, R1);
                 emit(EMIT_LOAD(R0, fmt_id));
-                emit(INST_SYS(2));
+                emit(EMIT_SYS(PAW_SYS_PRINTF));
             }
 
             break;
