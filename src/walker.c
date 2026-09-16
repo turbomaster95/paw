@@ -17,7 +17,7 @@ extern nu_mm_t *g_mm;
 
 static BytecodeBuffer *code_buf = NULL;
 static bool in_function = false;
-static int current_local_reg = 4;
+static int current_local_reg = 0;
 
 #define FFI_TYPE_UNKNOWN 7
 
@@ -47,38 +47,67 @@ static void emit(Instruction inst) {
 static int get_node_value(nu_ast_node_t *node) {
     if (!node) return 0;
 
-    if (node->type == AST_CONST) {
-        if (!node->val.str) return 0;
-
-        const char *src = node->val.str;
-        char clean[512];
-
-        removequotes(src, clean, sizeof(clean));
-
-        if (src[0] == '\'') return (unsigned char)clean[0];
-
-        return atoi(clean);
+    switch (node->type) {
+        case AST_CONST: {
+            if (!node->val.str) return 0;
+            char clean[512];
+            removequotes(node->val.str, clean, sizeof(clean));
+            if (node->val.str[0] == '\'') return (unsigned char)clean[0];
+            return atoi(clean);
+        }
+        case AST_IDENT: {
+            symb *sym = symtab_lookup(SymTable, node->val.str);
+            if (sym && sym->scope == SCOPE_GLOBAL) return sym->val;
+            return 0;
+        }
+        case AST_NEGATIVE: return -get_node_value(node->first_child);
+        case AST_BNOT:     return ~get_node_value(node->first_child);
+        case AST_LNOT:     return !get_node_value(node->first_child);
+        case AST_ADD: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) + get_node_value(r);
+        }
+        case AST_SUB: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) - get_node_value(r);
+        }
+        case AST_MUL: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) * get_node_value(r);
+        }
+        case AST_DIV: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            int den = get_node_value(r);
+            return den != 0 ? get_node_value(l) / den : 0;
+        }
+        case AST_MOD: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            int den = get_node_value(r);
+            return den != 0 ? get_node_value(l) % den : 0;
+        }
+        case AST_BAND: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) & get_node_value(r);
+        }
+        case AST_BOR: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) | get_node_value(r);
+        }
+        case AST_BXOR: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) ^ get_node_value(r);
+        }
+        case AST_SHL: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) << get_node_value(r);
+        }
+        case AST_SHR: {
+            nu_ast_node_t *l = node->first_child, *r = l ? l->next_sibling : NULL;
+            return get_node_value(l) >> get_node_value(r);
+        }
+        default:
+            return 0;
     }
-
-    if (node->type == AST_IDENT) {
-        symb *sym = symtab_lookup(SymTable, node->val.str);
-
-        if (sym && sym->scope == SCOPE_GLOBAL) return sym->val;
-    }
-
-    if (node->type == AST_ADD) {
-        nu_ast_node_t *left = node->first_child;
-        nu_ast_node_t *right = left ? left->next_sibling : NULL;
-        return get_node_value(left) + get_node_value(right);
-    }
-
-    if (node->type == AST_SUB) {
-        nu_ast_node_t *left = node->first_child;
-        nu_ast_node_t *right = left ? left->next_sibling : NULL;
-        return get_node_value(left) - get_node_value(right);
-    }
-
-    return 0;
 }
 
 const char *ffi_library_for_alias(const char *alias) {
@@ -247,11 +276,9 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *operand = node->first_child;
 
             if (operand) {
-                int operand_reg = current_local_reg++;
-                compile_expr(operand, operand_reg);
-                emit(EMIT_LOAD(target_reg, 0));
-                emit(EMIT_SUB(target_reg, target_reg, operand_reg));
-                current_local_reg--;
+                compile_expr(operand, target_reg);
+                emit(EMIT_LOAD(R0, 0));
+                emit(EMIT_SUB(target_reg, R0, target_reg));
             }
 
             return target_reg;
@@ -278,24 +305,21 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             int right_reg = current_local_reg++;
             compile_expr(right, right_reg);
 
-            emit(EMIT_MOV(target_reg, left_reg));
-
-            switch (node->type) {
-                case AST_ADD: emit(EMIT_ADD(target_reg, target_reg, right_reg)); break;
-                case AST_SUB: emit(EMIT_SUB(target_reg, target_reg, right_reg)); break;
-                case AST_MUL: emit(EMIT_MUL(target_reg, target_reg, right_reg)); break;
-                case AST_DIV: emit(EMIT_DIV(target_reg, target_reg, right_reg)); break;
-                case AST_MOD: emit(EMIT_MOD(target_reg, target_reg, right_reg)); break;
-                case AST_BAND: emit(EMIT_BAND(target_reg, target_reg, right_reg)); break;
-                case AST_BOR: emit(EMIT_BOR(target_reg, target_reg, right_reg)); break;
-                case AST_BXOR: emit(EMIT_BXOR(target_reg, target_reg, right_reg)); break;
-                case AST_SHL: emit(EMIT_SHL(target_reg, target_reg, right_reg)); break;
-                case AST_SHR: emit(EMIT_SHR(target_reg, target_reg, right_reg)); break;
+	    switch (node->type) {
+                case AST_ADD:  emit(EMIT_ADD(target_reg, left_reg, right_reg)); break;
+                case AST_SUB:  emit(EMIT_SUB(target_reg, left_reg, right_reg)); break;
+                case AST_MUL:  emit(EMIT_MUL(target_reg, left_reg, right_reg)); break;
+                case AST_DIV:  emit(EMIT_DIV(target_reg, left_reg, right_reg)); break;
+                case AST_MOD:  emit(EMIT_MOD(target_reg, left_reg, right_reg)); break;
+                case AST_BAND: emit(EMIT_BAND(target_reg, left_reg, right_reg)); break;
+                case AST_BOR:  emit(EMIT_BOR(target_reg, left_reg, right_reg)); break;
+                case AST_BXOR: emit(EMIT_BXOR(target_reg, left_reg, right_reg)); break;
+                case AST_SHL:  emit(EMIT_SHL(target_reg, left_reg, right_reg)); break;
+                case AST_SHR:  emit(EMIT_SHR(target_reg, left_reg, right_reg)); break;
                 default: break;
             }
 
-            current_local_reg--;
-            current_local_reg--;
+            current_local_reg -= 2;
             return target_reg;
         }
 
@@ -314,10 +338,13 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *operand = node->first_child;
 
             if (operand) {
-                int operand_reg = current_local_reg++;
-                compile_expr(operand, operand_reg);
+                int op_reg = current_local_reg++;
+                compile_expr(operand, op_reg);
+                emit(EMIT_CMPI(op_reg, 0));
                 emit(EMIT_LOAD(target_reg, 0));
-                emit(EMIT_CMPI(operand_reg, 0));
+		emit(EMIT_JNZ(2)); 
+                emit(EMIT_LOAD(target_reg, 1));
+
                 current_local_reg--;
             }
 

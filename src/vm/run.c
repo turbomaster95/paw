@@ -17,6 +17,9 @@
 #define NEED_FORMAT
 #include <common.h>
 
+#define DISASM_IMPLEMENTATION
+#include <nosry/disasm.h>
+
 nu_mm_t *g_mm = NULL;
 char backing[1024 * 1024 * 8];
 char *current_filename = NULL;
@@ -617,6 +620,28 @@ int main(int argc, char **argv) {
 
     VM_reset(vm, mem);
 
+    u32 load_vaddr = 0;
+
+    if (argc > 2 && strcmp(argv[1], "-d") == 0) {
+        FILE *f = fopen(argv[2], "rb");
+        if (!f) {
+            printf(_("Failed to open file for disassembly: %s\n"), argv[2]);
+            return -1;
+        }
+
+        size_t prog_len = 0;
+        if (VM_import_stream(vm, f, mem, &prog_len, load_vaddr) == 0) {
+            printf("Disassembled %s (size: %ld)\n", argv[2], prog_len);
+            VM_disassemble_stream(mem->rom, prog_len, stdout);
+            fclose(f);
+            return 0;
+        }
+
+        printf("Failed to parse binary stream: %s\n", argv[2]);
+        fclose(f);
+        return -1;
+    }
+
     g_vm_ffi = dcNewCallVM(4096);
 
     if (!g_vm_ffi) {
@@ -630,7 +655,6 @@ int main(int argc, char **argv) {
     current_filename = argv[1];
     vm->syscall_handler = custom_syscalls;
 
-    u32 load_vaddr = 0;
     int ret = VM_run_file(current_filename, mem, vm, load_vaddr);
 
     if (ret != 0) {
