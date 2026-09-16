@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <comp.h>
-#include <etc.h>
+#include <dogma.h>
 #include <nu.h>
 #include <glog.h>
 #include <string.h>
@@ -690,7 +690,7 @@ void parse_block(nu_ast_node_t* parent) {
     expect('}', _("Expected '}' at end of block"));
 }
 
-void print_ast(nu_ast_node_t *node, int depth) {
+void dogma_print_ast(nu_ast_node_t *node, int depth) {
     if (!node) return;
 
     for (int i = 0; i < depth; i++) printf("  ");
@@ -704,11 +704,11 @@ void print_ast(nu_ast_node_t *node, int depth) {
     printf("\n");
 
     for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
-        print_ast(child, depth + 1);
+        dogma_print_ast(child, depth + 1);
     }
 }
 
-void parse(const char* output_file) {
+void dogma_parse(const char* output_file) {
     advance(); /* prime the stream */
     nu_ast_node_t *root = newnode(NULL, AST_ROOT);
     g_ast->root = root;
@@ -721,7 +721,7 @@ void parse(const char* output_file) {
         parse_statement(root);
     }
 
-    print_ast(root, 0);
+    dogma_print_ast(root, 0);
 
     if (!output_file) {
 	err(_("Output File is NULL!"));
@@ -732,5 +732,5 @@ void parse(const char* output_file) {
     char *filename = nu_alloc(g_mm, len);
 
     snprintf(filename, len, "%s%s", output_file, ext);
-    walk_ast_to_file(root, filename);
+    dogma_ast2file(root, filename);
 }

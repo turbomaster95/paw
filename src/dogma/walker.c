@@ -777,7 +777,7 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
     return true;
 }
 
-void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
+void dogma_ast2file(nu_ast_node_t *node, const char *out_filename) {
     if (!node) return;
 
     g_root_node = node;

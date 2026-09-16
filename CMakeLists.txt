@@ -1,4 +1,11 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 3.11)
+
+find_program(CCACHE_PROGRAM ccache)
+
+if(CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+endif()
 
 set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
 
@@ -10,10 +17,12 @@ endif()
 
 project(paw C)
 
+option(DOGMAONLY "Only build libdogma, no pawc/pawv" OFF)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_compile_options(-Wall -Wextra -Wno-unused)
+add_compile_options(-Wno-unused)
 
 if("${PAW_TARGET}" STREQUAL "wasi")
     add_compile_definitions(
@@ -36,6 +45,7 @@ if(NOT "${PAW_TARGET}" STREQUAL "wasi")
     FetchContent_Declare(
         dyncall
         URL https://dyncall.org/r1.4/dyncall-1.4.tar.gz
+	DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(dyncall)
 
@@ -45,30 +55,38 @@ if(NOT "${PAW_TARGET}" STREQUAL "wasi")
     )
 endif()
 
-find_package(FLEX REQUIRED)
-flex_target(PawLexer src/lex.l ${CMAKE_CURRENT_BINARY_DIR}/lex.yy.c)
-
 add_subdirectory(lib/nu)
 
-file(GLOB PAWC_SRCS "src/*.c")
-list(REMOVE_ITEM PAWC_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/prep.c")
+find_package(FLEX REQUIRED)
+flex_target(DogLexer src/dogma/lex.l ${CMAKE_CURRENT_BINARY_DIR}/dogma/lex.yy.c)
 
-add_compile_options(-include ${CMAKE_CURRENT_SOURCE_DIR}/include/prel.h)
+file(GLOB DOGMA_SRCS "src/dogma/*.c")
+list(APPEND DOGMA_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/common/lson.c")
 
-add_executable(pawc
-    ${PAWC_SRCS}
-    ${FLEX_PawLexer_OUTPUTS}
-)
-target_link_libraries(pawc PRIVATE nu_static)
+add_compile_options(-Wall -Wextra -include ${CMAKE_CURRENT_SOURCE_DIR}/include/prel.h)
 
-file(GLOB PAWV_SRCS "src/vm/*.c" "src/lson.c")
+add_library(dogma_s STATIC ${DOGMA_SRCS} ${FLEX_DogLexer_OUTPUTS})
+set_target_properties(dogma_s PROPERTIES OUTPUT_NAME dogma)
+target_link_libraries(dogma_s PRIVATE nu_static)
 
-add_executable(pawv
-    ${PAWV_SRCS}
-)
+add_library(dogma_d SHARED ${DOGMA_SRCS} ${FLEX_DogLexer_OUTPUTS})
+set_target_properties(dogma_d PROPERTIES OUTPUT_NAME dogma)
 
-if(NOT "${PAW_TARGET}" STREQUAL "wasi")
-    target_link_libraries(pawv PRIVATE nu_static dyncall_s dynload_s)
-else()
-    target_link_libraries(pawv PRIVATE nu_static)
+if(NOT DOGMAONLY)
+	file(GLOB PAWC_SRCS "src/pawc/*.c")
+
+	add_compile_options(-I${CMAKE_CURRENT_SOURCE_DIR}/src/common)
+
+	add_executable(pawc ${PAWC_SRCS})
+	target_link_libraries(pawc PRIVATE nu_static dogma_s)
+
+	file(GLOB PAWV_SRCS "src/pawv/*.c")
+
+	add_executable(pawv ${PAWV_SRCS})
+
+	if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+	    target_link_libraries(pawv PRIVATE nu_static dyncall_s dynload_s dogma_s)
+	else()
+	    target_link_libraries(pawv PRIVATE nu_static dogma_s)
+	endif()
 endif()
