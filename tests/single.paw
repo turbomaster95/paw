@@ -1,0 +1,1 @@
+int x = 10; int y = 99; print("Hello"); print(x+y); printf("\n%c", x);
