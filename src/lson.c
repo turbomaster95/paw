@@ -5,7 +5,7 @@
 
 static void set_error(LsonTranslator *t, size_t line, const char *msg) {
     nu_snprintf(t->last_error, sizeof(t->last_error),
-                "LSON Parse Error (Line %zu): %s", line, msg);
+                "LSON Parse Error (Line %zu): %s\n", line, msg);
 }
 
 static char* parse_lson_string(LsonTranslator *t, nu_lexer_t *lexer) {
@@ -143,7 +143,7 @@ bool lson_load_string(LsonTranslator *t, const char *lson_text) {
 bool lson_load_file(LsonTranslator *t, const char *filepath) {
     FILE *file = fopen(filepath, "rb");
     if (!file) {
-        nu_snprintf(t->last_error, sizeof(t->last_error), "Failed to open file: %s", filepath);
+        nu_snprintf(t->last_error, sizeof(t->last_error), "Failed to open file: %s\n\n", filepath);
         return false;
     }
 

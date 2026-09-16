@@ -12,12 +12,15 @@
 #define NEED_FORMAT
 #include <common.h>
 
+#define FP R15
+#define WORD_SIZE 4 // 4-byte stack slot alignment
+
 extern nu_ast_node_t *g_root_node;
 extern nu_mm_t *g_mm;
 
 static BytecodeBuffer *code_buf = NULL;
 static bool in_function = false;
-static int current_local_reg = 0;
+static int current_frame_bytes = 0; // Tracks stack offset for local frame
 
 #define FFI_TYPE_UNKNOWN 7
 
@@ -27,6 +30,13 @@ int compile_expr(nu_ast_node_t *node, int target_reg);
 
 static void removequotes(const char *in, char *out, size_t out_size);
 static void unescape(const char *in, char *out, size_t out_sz);
+
+// Allocates space on the stack frame and returns a negative byte offset relative to FP
+static int alloc_stack_offset(int size_bytes) {
+    int aligned_size = (size_bytes + (WORD_SIZE - 1)) & ~(WORD_SIZE - 1);
+    current_frame_bytes += aligned_size;
+    return -current_frame_bytes;
+}
 
 static void emit(Instruction inst) {
     if (!code_buf) {
@@ -119,7 +129,6 @@ const char *ffi_library_for_alias(const char *alias) {
         if (strcmp(child->val.str, alias) != 0) continue;
 
         nu_ast_node_t *lib = child->first_child;
-
         if (lib && lib->type == AST_LIB_DECL && lib->val.str) return lib->val.str;
     }
 
@@ -171,11 +180,8 @@ static int ffi_expr_type(nu_ast_node_t *node) {
 
         case AST_IDENT: {
             symb *sym = symtab_lookup(SymTable, node->val.str);
-
             if (!sym) return FFI_TYPE_UNKNOWN;
-
             if (sym->type == VAR_CHAR) return PAW_FFI_CHAR;
-
             return PAW_FFI_INT;
         }
 
@@ -193,9 +199,6 @@ static int ffi_expr_type(nu_ast_node_t *node) {
         case AST_BNOT:
         case AST_LNOT:
             return PAW_FFI_INT;
-
-        case AST_FFI_CALL:
-            return FFI_TYPE_UNKNOWN;
 
         default:
             return FFI_TYPE_UNKNOWN;
@@ -236,8 +239,12 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
                 return target_reg;
             }
 
-            if (sym->scope == SCOPE_GLOBAL) emit(EMIT_LOAD(target_reg, sym->val));
-            else emit(EMIT_MOV(target_reg, sym->location));
+            if (sym->scope == SCOPE_GLOBAL) {
+                emit(EMIT_LOAD(target_reg, sym->val));
+            } else {
+                // Load value from stack slot [FP + offset] into target register
+                emit(EMIT_LOAD_MEM(target_reg, FP, sym->location));
+            }
 
             return target_reg;
         }
@@ -249,7 +256,6 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             if (!var_node || !val_node) return target_reg;
 
             const char *var_name = var_node->val.str;
-
             if (!var_name && var_node->first_child) var_name = var_node->first_child->val.str;
 
             symb *sym = symtab_lookup(SymTable, var_name);
@@ -261,12 +267,11 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
 
             if (sym->scope == SCOPE_GLOBAL) {
                 compile_expr(val_node, target_reg);
-                sym->val = get_node_value(val_node);
                 emit(EMIT_MOV(sym->location, target_reg));
             } else {
-                compile_expr(val_node, sym->location);
-
-                if (target_reg != sym->location) emit(EMIT_MOV(target_reg, sym->location));
+                compile_expr(val_node, target_reg);
+                // Store target register into stack slot [FP + offset]
+                emit(EMIT_STORE_MEM(target_reg, FP, sym->location));
             }
 
             return target_reg;
@@ -276,15 +281,16 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *operand = node->first_child;
 
             if (operand) {
-                compile_expr(operand, target_reg);
-                emit(EMIT_LOAD(R0, 0));
-                emit(EMIT_SUB(target_reg, R0, target_reg));
+                int scratch = (target_reg == R1) ? R2 : R1;
+                compile_expr(operand, scratch);
+                emit(EMIT_LOAD(target_reg, 0));
+                emit(EMIT_SUB(target_reg, target_reg, scratch));
             }
 
             return target_reg;
         }
 
-        case AST_ADD:
+	case AST_ADD:
         case AST_SUB:
         case AST_MUL:
         case AST_DIV:
@@ -299,27 +305,27 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
 
             if (!left || !right) return target_reg;
 
-            int left_reg = current_local_reg++;
-            compile_expr(left, left_reg);
+            compile_expr(left, target_reg);
 
-            int right_reg = current_local_reg++;
+            int right_reg = (target_reg == R1) ? R2 : R1;
+            emit(EMIT_PUSH(target_reg));
             compile_expr(right, right_reg);
+            emit(EMIT_POP(target_reg));
 
-	    switch (node->type) {
-                case AST_ADD:  emit(EMIT_ADD(target_reg, left_reg, right_reg)); break;
-                case AST_SUB:  emit(EMIT_SUB(target_reg, left_reg, right_reg)); break;
-                case AST_MUL:  emit(EMIT_MUL(target_reg, left_reg, right_reg)); break;
-                case AST_DIV:  emit(EMIT_DIV(target_reg, left_reg, right_reg)); break;
-                case AST_MOD:  emit(EMIT_MOD(target_reg, left_reg, right_reg)); break;
-                case AST_BAND: emit(EMIT_BAND(target_reg, left_reg, right_reg)); break;
-                case AST_BOR:  emit(EMIT_BOR(target_reg, left_reg, right_reg)); break;
-                case AST_BXOR: emit(EMIT_BXOR(target_reg, left_reg, right_reg)); break;
-                case AST_SHL:  emit(EMIT_SHL(target_reg, left_reg, right_reg)); break;
-                case AST_SHR:  emit(EMIT_SHR(target_reg, left_reg, right_reg)); break;
+            switch (node->type) {
+                case AST_ADD:  emit(EMIT_ADD(target_reg, target_reg, right_reg)); break;
+                case AST_SUB:  emit(EMIT_SUB(target_reg, target_reg, right_reg)); break;
+                case AST_MUL:  emit(EMIT_MUL(target_reg, target_reg, right_reg)); break;
+                case AST_DIV:  emit(EMIT_DIV(target_reg, target_reg, right_reg)); break;
+                case AST_MOD:  emit(EMIT_MOD(target_reg, target_reg, right_reg)); break;
+                case AST_BAND: emit(EMIT_BAND(target_reg, target_reg, right_reg)); break;
+                case AST_BOR:  emit(EMIT_BOR(target_reg, target_reg, right_reg)); break;
+                case AST_BXOR: emit(EMIT_BXOR(target_reg, target_reg, right_reg)); break;
+                case AST_SHL:  emit(EMIT_SHLR(target_reg, right_reg)); break;
+                case AST_SHR:  emit(EMIT_SHRR(target_reg, right_reg)); break;
                 default: break;
             }
 
-            current_local_reg -= 2;
             return target_reg;
         }
 
@@ -334,18 +340,22 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             return target_reg;
         }
 
-        case AST_LNOT: {
+	case AST_LNOT: {
             nu_ast_node_t *operand = node->first_child;
 
             if (operand) {
-                int op_reg = current_local_reg++;
-                compile_expr(operand, op_reg);
-                emit(EMIT_CMPI(op_reg, 0));
-                emit(EMIT_LOAD(target_reg, 0));
-		emit(EMIT_JNZ(2)); 
-                emit(EMIT_LOAD(target_reg, 1));
+                int scratch = (target_reg == R1) ? R2 : R1;
+                compile_expr(operand, target_reg);
 
-                current_local_reg--;
+                emit(EMIT_LOAD(scratch, 0));
+                emit(EMIT_SUB(scratch, scratch, target_reg));
+                emit(EMIT_BOR(target_reg, target_reg, scratch));
+                emit(EMIT_SHR(target_reg, 0, 31));
+
+                emit(EMIT_LOAD(scratch, 1));
+                emit(EMIT_SUB(scratch, scratch, target_reg));
+                emit(EMIT_LOAD(target_reg, 0));
+                emit(EMIT_ADD(target_reg, target_reg, scratch));
             }
 
             return target_reg;
@@ -379,12 +389,14 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             nu_ast_node_t *arg = node->first_child;
 
             while (param && arg) {
-                const char *param_name = NULL;
+                const char *param_name = param->val.str;
 
-                for (nu_ast_node_t *pchild = param->first_child; pchild != NULL; pchild = pchild->next_sibling) {
-                    if (pchild->type == AST_PARAM_NAME) {
-                        param_name = pchild->val.str;
-                        break;
+                if (!param_name) {
+                    for (nu_ast_node_t *pchild = param->first_child; pchild != NULL; pchild = pchild->next_sibling) {
+                        if (pchild->type == AST_PARAM_NAME) {
+                            param_name = pchild->val.str;
+                            break;
+                        }
                     }
                 }
 
@@ -397,8 +409,12 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
                     }
 
                     sym->scope = SCOPE_LOCAL;
-                    sym->location = current_local_reg++;
-                    compile_expr(arg, sym->location);
+                    if (sym->location == 0) {
+                        sym->location = alloc_stack_offset(4);
+                    }
+
+                    compile_expr(arg, R1);
+                    emit(EMIT_STORE_MEM(R1, FP, sym->location));
                 }
 
                 param = param->next_sibling;
@@ -424,14 +440,8 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             const char *alias = alias_node->val.str;
             const char *library = ffi_library_for_alias(alias);
 
-            if (!library) {
-                fprintf(stderr, _("FFI error: module alias '%s' has no library declaration\n"), alias);
-                emit(EMIT_LOAD(target_reg, 0));
-                return target_reg;
-            }
-
-            if (!node->val.str) {
-                fprintf(stderr, _("FFI error: module '%s' call has no function name\n"), library);
+            if (!library || !node->val.str) {
+                fprintf(stderr, _("FFI error: invalid library or symbol for '%s'\n"), alias);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -440,7 +450,6 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             int symbol_id = register_runtime_string(node->val.str);
 
             if (library_id < 0 || symbol_id < 0) {
-                fprintf(stderr, _("FFI error: failed to register metadata for '%s.%s()'\n"), alias, node->val.str);
                 emit(EMIT_LOAD(target_reg, 0));
                 return target_reg;
             }
@@ -448,41 +457,27 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             emit(EMIT_LOAD(R0, library_id));
             emit(EMIT_LOAD(R1, symbol_id));
             emit(EMIT_SYS(PAW_SYS_FFI_LOOKUP));
-
             emit(EMIT_PUSH(R0));
 
             nu_ast_node_t *arg = alias_node->next_sibling;
             uint32_t argc = 0;
             uint64_t packed_types = ffi_pack_types(arg, &argc);
-            uint32_t packed_low = (uint32_t)packed_types;
-            uint32_t packed_high = (uint32_t)(packed_types >> 32);
 
             emit(EMIT_PUSHI(argc));
-            emit(EMIT_PUSHI(packed_low));
-            emit(EMIT_PUSHI(packed_high));
+            emit(EMIT_PUSHI((uint32_t)packed_types));
+            emit(EMIT_PUSHI((uint32_t)(packed_types >> 32)));
             emit(EMIT_SYS(PAW_SYS_FFI_CHECK));
 
             arg = alias_node->next_sibling;
 
             while (arg) {
                 if (argc > 15) {
-                    fprintf(stderr, _("FFI error: '%s.%s()' has too many arguments\n"), alias, node->val.str);
                     emit(EMIT_LOAD(target_reg, 0));
                     return target_reg;
                 }
 
-                int arg_reg = current_local_reg++;
-
-                if (arg_reg >= R15) {
-                    fprintf(stderr, _("FFI error: expression for '%s.%s()' uses too many temporary registers\n"), alias, node->val.str);
-                    current_local_reg--;
-                    emit(EMIT_LOAD(target_reg, 0));
-                    return target_reg;
-                }
-
-                compile_ffi_argument(arg, arg_reg);
-                emit(EMIT_PUSH(arg_reg));
-                current_local_reg--;
+                compile_ffi_argument(arg, R1);
+                emit(EMIT_PUSH(R1));
 
                 arg = arg->next_sibling;
             }
@@ -504,21 +499,18 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
 
 static void removequotes(const char *in, char *out, size_t out_size) {
     if (!out || out_size == 0) return;
-
     if (!in) {
         out[0] = '\0';
         return;
     }
 
     size_t len = strlen(in);
-
     if (len >= 2) {
         char first = in[0];
         char last = in[len - 1];
 
         if ((first == '\'' && last == '\'') || (first == '"' && last == '"')) {
             size_t inner = len - 2;
-
             if (inner >= out_size) inner = out_size - 1;
 
             memcpy(out, in + 1, inner);
@@ -537,7 +529,6 @@ static void unescape(const char *in, char *out, size_t out_sz) {
     for (size_t i = 0; in[i] != '\0' && j + 1 < out_sz; i++) {
         if (in[i] == '\\') {
             char n = in[i + 1];
-
             if (n == '\0') break;
 
             switch (n) {
@@ -550,8 +541,8 @@ static void unescape(const char *in, char *out, size_t out_sz) {
                 case 'f': out[j++] = '\f'; i++; break;
                 case 'v': out[j++] = '\v'; i++; break;
                 case '\\': out[j++] = '\\'; i++; break;
-                case '"': out[j++] = '"'; break;
-                case '\'': out[j++] = '\''; break;
+                case '"': out[j++] = '"'; i++; break;
+                case '\'': out[j++] = '\''; i++; break;
                 default: out[j++] = n; i++; break;
             }
         } else {
@@ -572,20 +563,21 @@ void compile_node(nu_ast_node_t *node) {
 
         case AST_FUNC_DECL: {
             bool prev_in_func = in_function;
+            int prev_frame_bytes = current_frame_bytes;
+
             in_function = true;
+            current_frame_bytes = 0; // Reset stack frame size for this function
 
             for (nu_ast_node_t *child = node->first_child; child != NULL; child = child->next_sibling) {
                 if (child->type == AST_BLOCK) compile_node(child);
             }
 
+            current_frame_bytes = prev_frame_bytes;
             in_function = prev_in_func;
             break;
         }
 
         case AST_FUNC_CALL:
-            compile_expr(node, R0);
-            break;
-
         case AST_FFI_CALL:
             compile_expr(node, R0);
             break;
@@ -596,25 +588,21 @@ void compile_node(nu_ast_node_t *node) {
 
         case AST_PRINTF_STMT: {
             nu_ast_node_t *fmt_node = node->first_child;
-
             if (!fmt_node) break;
 
             size_t in_len = strlen(fmt_node->val.str);
             char *val = nu_alloc(g_mm, in_len + 1);
 
             if (!val) break;
-
             removequotes(fmt_node->val.str, val, in_len + 1);
 
             char *realfmt = nu_alloc(g_mm, in_len + 1);
-
             if (!realfmt) {
                 nu_free(g_mm, val);
                 break;
             }
 
             unescape(val, realfmt, in_len + 1);
-
             int fmt_id = vm_register_format(realfmt);
 
             emit(EMIT_LOAD(R0, fmt_id));
@@ -623,46 +611,33 @@ void compile_node(nu_ast_node_t *node) {
             int reg_base = 1;
             nu_ast_node_t *arg = fmt_node->next_sibling;
 
-            while (arg && count < UF_REGS) {
+            while (arg && count < (MAX_REGS - 1)) {
                 compile_expr(arg, reg_base + count);
                 count++;
                 arg = arg->next_sibling;
             }
 
             emit(EMIT_SYS(PAW_SYS_PRINTF));
+            nu_free(g_mm, val);
+            nu_free(g_mm, realfmt);
             break;
         }
 
         case AST_PRINT_STMT: {
             nu_ast_node_t *expr = node->first_child;
-
             if (!expr) break;
 
             if (expr->type == AST_FFI_CALL) {
                 compile_expr(expr, R0);
                 emit(EMIT_SYS(PAW_SYS_FFI_PRINT));
-                break;
-            }
-
-            if (expr->type == AST_CONST && expr->val.str && expr->val.str[0] == '"') {
+            } else if (expr->type == AST_CONST && expr->val.str && expr->val.str[0] == '"') {
                 size_t orig_len = strlen(expr->val.str);
                 char *val = nu_alloc(g_mm, orig_len + 1);
                 char *realfmt = nu_alloc(g_mm, orig_len + 1);
 
                 if (val && realfmt) {
-                    strcpy(val, expr->val.str);
-
-                    while ((val[0] == '"' || val[0] == '\'') && strlen(val) >= 2) {
-                        char tmp[512];
-                        removequotes(val, tmp, sizeof(tmp));
-
-                        if (strcmp(val, tmp) == 0) break;
-
-                        strcpy(val, tmp);
-                    }
-
+                    removequotes(expr->val.str, val, orig_len + 1);
                     unescape(val, realfmt, orig_len + 1);
-
                     int str_id = vm_register_string(realfmt);
 
                     emit(EMIT_LOAD(R0, str_id));
@@ -676,7 +651,6 @@ void compile_node(nu_ast_node_t *node) {
 
                 if (expr->type == AST_IDENT) {
                     symb *sym = symtab_lookup(SymTable, expr->val.str);
-
                     if (sym && sym->type == VAR_CHAR) fmt_str = "%c\n";
                 } else if (expr->type == AST_CONST && expr->val.str && expr->val.str[0] == '\'') {
                     fmt_str = "%c\n";
@@ -708,13 +682,19 @@ void compile_node(nu_ast_node_t *node) {
 
             if (in_function) {
                 sym->scope = SCOPE_LOCAL;
-                sym->location = current_local_reg++;
+                if (sym->location == 0) {
+                    sym->location = alloc_stack_offset(4);
+                }
 
-                if (val_node) compile_expr(val_node, sym->location);
-                else emit(EMIT_LOAD(sym->location, 0));
+                if (val_node) {
+                    compile_expr(val_node, R1);
+                    emit(EMIT_STORE_MEM(R1, FP, sym->location));
+                } else {
+                    emit(EMIT_LOAD(R1, 0));
+                    emit(EMIT_STORE_MEM(R1, FP, sym->location));
+                }
             } else {
                 sym->scope = SCOPE_GLOBAL;
-
                 if (val_node) sym->val = get_node_value(val_node);
             }
 
@@ -727,9 +707,7 @@ void compile_node(nu_ast_node_t *node) {
 
         case AST_RETURN_STMT: {
             nu_ast_node_t *val_node = node->first_child;
-
             if (val_node) compile_expr(val_node, R0);
-
             break;
         }
 
@@ -740,26 +718,19 @@ void compile_node(nu_ast_node_t *node) {
             if (!var_node || !val_node) break;
 
             const char *var_name = var_node->val.str;
-
             if (!var_name && var_node->first_child) var_name = var_node->first_child->val.str;
 
-            if (!var_name) {
-                fprintf(stderr, _("Error: Invalid assignment target\n"));
-                break;
-            }
+            if (!var_name) break;
 
             symb *sym = symtab_lookup(SymTable, var_name);
-
-            if (!sym) {
-                fprintf(stderr, _("Error: Undefined variable '%s' in assignment\n"), var_name);
-                break;
-            }
+            if (!sym) break;
 
             if (sym->scope == SCOPE_GLOBAL) {
                 compile_expr(val_node, R1);
-                sym->val = get_node_value(val_node);
+                emit(EMIT_MOV(sym->location, R1));
             } else {
-                compile_expr(val_node, sym->location);
+                compile_expr(val_node, R1);
+                emit(EMIT_STORE_MEM(R1, FP, sym->location));
             }
 
             break;
@@ -775,11 +746,7 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
     if (!buf || !filename) return false;
 
     FILE *f = fopen(filename, "wb");
-
-    if (!f) {
-        perror(_("Failed to open output bytecode file"));
-        return false;
-    }
+    if (!f) return false;
 
     uint32_t str_count = vm_get_string_count();
 
@@ -802,12 +769,10 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
         uint32_t len = str ? (uint32_t)strlen(str) : 0;
 
         fwrite(&len, sizeof(uint32_t), 1, f);
-
         if (len > 0) fwrite(str, sizeof(char), len, f);
     }
 
     fwrite(buf->instructions, sizeof(Instruction), buf->count, f);
-
     fclose(f);
     return true;
 }
@@ -818,7 +783,9 @@ void walk_ast_to_file(nu_ast_node_t *node, const char *out_filename) {
     g_root_node = node;
     code_buf = NULL;
     in_function = false;
-    current_local_reg = 4;
+    current_frame_bytes = 0;
+
+    emit(EMIT_LOAD(FP, RAM_SIZE - 4));
 
     nu_ast_node_t *main_fn = NULL;
 

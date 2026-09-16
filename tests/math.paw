@@ -24,7 +24,7 @@ func main() {
     int res_shl  = b << 2;     // Expected: 20 (5 * 4)
     int res_shr  = a >> 1;     // Expected: 6  (12 / 2)
 
-    int combo = a * 2 >> 1 & 15 + -b; // Expected: 7
+    int combo = a * 2 >> 1 & 15 + -b; // Expected: 8
 
     print(res_add);
     print(res_sub);

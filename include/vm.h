@@ -77,6 +77,9 @@ typedef struct {
 #define EMIT_SHR(dest_r, src_r, off)       INST_SHR(dest_r, off)
 #define EMIT_SHL(dest_r, src_r, off)       INST_SHL(dest_r, off)
 
+#define EMIT_SHRR(dest_r, src_r)           INST_SHRR(dest_r, src_r)
+#define EMIT_SHLR(dest_r, src_r)           INST_SHLR(dest_r, src_r)
+
 #define EMIT_CMP(r1, r2)                   INST_CMP(r1, r2)
 #define EMIT_CMPI(r1, imm_val)             INST_CMPI(r1, imm_val)
 

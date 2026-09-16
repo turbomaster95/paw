@@ -55,8 +55,12 @@ int main(int argc, char **argv) {
 
     g_translator = &lson;
 
-    if (!lson_load_file(&lson, "locales/catgirl.son")) {
-        fprintf(stderr, "%s", lson_get_last_error(&lson));
+    char *localename = getenv("PLOCALE_FILE");
+
+    localename = (localename == NULL) ? "" : localename;
+
+    if (!lson_load_file(&lson, localename)) {
+        fprintf(stderr, "Using Default Locale: %s\n\n", (char*)"English");
     } else {
         printf("Loaded locale: %s", lson_tr(&lson, "MSG_WELCOME"));
     }
