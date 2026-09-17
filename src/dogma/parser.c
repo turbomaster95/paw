@@ -21,11 +21,13 @@ extern char* current_filename;
 static int current_tok;
 extern int tok_col;
 nu_ast_node_t *g_root_node = NULL;
+static var_type_t g_current_func_ret_type = VAR_UNKNOWN;
 
 symbt* SymTable;
 
 nu_ast_node_t* parse_expression_prec(int min_prec);
 nu_ast_node_t* parse_expression(nu_ast_node_t* parent);
+static int is_type_token(int token);
 
 const char *tokname(int token) {
     switch (token) {
@@ -205,6 +207,33 @@ nu_ast_node_t* parse_primary(nu_ast_node_t* parent) {
     return NULL;
 }
 
+
+static var_type_t infer_node_type(nu_ast_node_t* node) {
+    if (!node) return VAR_UNKNOWN;
+
+    if (node->type == AST_CAST && node->val.str) {
+        if (strcmp(node->val.str, "char") == 0) return VAR_CHAR;
+        if (strcmp(node->val.str, "int") == 0) return VAR_INT;
+    }
+
+    if (node->type == AST_IDENT && node->val.str) {
+        symb* sym = symtab_lookup(SymTable, node->val.str);
+        if (sym) return sym->type;
+    }
+
+    if (node->type == AST_CONST && node->val.str) {
+        if (node->val.str[0] == '\'') return VAR_CHAR;
+        if (node->val.str[0] == '"')  return VAR_STRING;
+        return VAR_INT;
+    }
+
+    if (node->first_child) {
+        return infer_node_type(node->first_child);
+    }
+
+    return VAR_UNKNOWN;
+}
+
 static int get_tok_precedence(int tok) {
     switch (tok) {
         case '|': return 1;                  // Bitwise OR
@@ -238,6 +267,26 @@ static uint32_t get_ast_op_type(int tok) {
 }
 
 nu_ast_node_t* parse_unary(void) {
+    if (match('[')) {
+        advance();
+        if (!is_type_token(current_tok)) {
+            synerr(yylineno, tok_col, _("Expected type specifier inside cast brackets '[' ']'"));
+        }
+
+        char type_str[32];
+        snprintf(type_str, sizeof(type_str), "%s", yytext);
+        advance();
+
+        expect(']', _("Expected ']' after cast type specifier"));
+
+        nu_ast_node_t* cast_node = newstrnode(NULL, AST_CAST, type_str);
+        nu_ast_node_t* operand = parse_unary();
+        if (operand) {
+            nu_ast_add_child(cast_node, operand);
+        }
+        return cast_node;
+    }
+
     if (current_tok == '-' || current_tok == '~' || current_tok == '!') {
         int op = current_tok;
         uint32_t op_type = (op == '-') ? AST_NEGATIVE : (op == '~') ? AST_BNOT : AST_LNOT;
@@ -298,7 +347,16 @@ void parse_return_stmt(nu_ast_node_t* root) {
     nu_ast_node_t* ret_node = newnode(root, AST_RETURN_STMT);
     
     if (!match(';')) {
-        parse_expression(ret_node);
+        nu_ast_node_t* expr = parse_expression(ret_node);
+        var_type_t expr_type = infer_node_type(expr);
+
+        if (g_current_func_ret_type != VAR_UNKNOWN && 
+            expr_type != VAR_UNKNOWN && 
+            expr_type != g_current_func_ret_type) {
+            synerr(yylineno, tok_col, _("Return type mismatch in function"));
+        }
+    } else if (g_current_func_ret_type != VAR_UNKNOWN) {
+        synerr(yylineno, tok_col, _("Non-void function must return a value"));
     }
     
     expect(';', _("Expected ';' after return value"));
@@ -448,9 +506,15 @@ void parse_function_decl(nu_ast_node_t* root) {
     }
     expect(')', _("Expected ')' after parameters"));
 
+    var_type_t prev_ret_type = g_current_func_ret_type;
+    g_current_func_ret_type = VAR_UNKNOWN;
+
     if (match(RARROW)) {
         advance();
         
+        if (current_tok == INT)       g_current_func_ret_type = VAR_INT;
+        else if (current_tok == CHAR) g_current_func_ret_type = VAR_CHAR;
+
         nu_ast_node_t* ret_type_node = newnode(fn_node, AST_FUNC_RETURN_TYPE);
         if (!parse_type_specifier(ret_type_node)) {
             synerr(yylineno, tok_col, _("Expected return type after '->'"));
@@ -458,6 +522,7 @@ void parse_function_decl(nu_ast_node_t* root) {
     }
 
     parse_block(fn_node);
+    g_current_func_ret_type = prev_ret_type;
 }
 
 void parse_char_decl(nu_ast_node_t* root) {

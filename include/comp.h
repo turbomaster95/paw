@@ -23,7 +23,8 @@ enum TokenTypes {
     SHR,
     SHL,
     EXTERN,
-    LIB
+    LIB,
+    CAST
 };
 
 typedef union {
@@ -37,7 +38,8 @@ typedef enum {
     VAR_START = 0,
     VAR_INT,
     VAR_STRING,
-    VAR_CHAR
+    VAR_CHAR,
+    VAR_UNKNOWN
 } var_type_t;
 
 typedef enum {
