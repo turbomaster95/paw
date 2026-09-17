@@ -773,7 +773,12 @@ void dogma_print_ast(nu_ast_node_t *node, int depth) {
     }
 }
 
-void dogma_parse(const char* output_file) {
+dogma_status_t dogma_parse(const char* output_file) {
+    if (!output_file) {
+	     err(_("Output File is NULL!"));
+      return DOGMA_ERR_IO;
+    }
+
     advance(); /* prime the stream */
     nu_ast_node_t *root = newnode(NULL, AST_ROOT);
     g_ast->root = root;
@@ -788,10 +793,7 @@ void dogma_parse(const char* output_file) {
 
     dogma_print_ast(root, 0);
 
-    if (!output_file) {
-	err(_("Output File is NULL!"));
-    }
-
+    
     const char ext[] = ".pawv";
     size_t len = strlen(output_file) + sizeof(ext);
     char *filename = nu_alloc(g_mm, len);
