@@ -1,6 +1,4 @@
 !.gitignore
-!src/pawc
-!src/pawv
 
 .vscode/
 *.o
@@ -10,6 +8,4 @@
 obj/
 obj-*/
 build/
-pawc
-pawv
 *.pawv
