@@ -21,7 +21,6 @@ nu_mm_t *g_mm = NULL;
 nu_ast_t *g_ast = NULL;
 LsonTranslator *g_translator = NULL;
 
-YYSTYPE yylval;
 char *current_filename = NULL;
 
 char backing[1024 * 1024 * 8]; // 8 mb

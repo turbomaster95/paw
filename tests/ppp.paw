@@ -1,11 +1,10 @@
-
 #ifdef HELLO
 
-func add(a, b) {
+func add(int a, int b) -> int {
 	return a + b;
 }
 
-func main() {
+func main() -> int {
 	int ret = add(10, 10);
 	return ret;
 }

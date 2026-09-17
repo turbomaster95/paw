@@ -1,4 +1,4 @@
-func square(int n) {
+func square(int n) -> int {
     return n * n;
 }
 

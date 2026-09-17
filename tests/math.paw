@@ -1,4 +1,4 @@
-func main() {
+func main() -> int {
     int a = 12;
     int b = 5;
 
@@ -43,4 +43,6 @@ func main() {
     print(res_shl);
     print(res_shr);
     print(combo);
+
+    return 0;
 }

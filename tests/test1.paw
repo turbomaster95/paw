@@ -1,7 +1,7 @@
 const int GLOBAL_OFFSET = 10;
 int global_counter = 0;
 
-func compute_sum(a, b) {
+func compute_sum(int a, int b) -> int {
     int sub_res = b - 5;
     int total = a + sub_res + GLOBAL_OFFSET;
     return total;

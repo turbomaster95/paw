@@ -31,7 +31,7 @@ int errcnt = 0;
 
 %%
 "//"[^\n]*              { /* consume single line comment */ }
-^"#line"[^\n]*        { /* consume preprocessor line marker */ }
+^"#line"[^\n]*          { /* consume preprocessor line marker */ }
 
 "func"                  { return(FUNC); }
 "if"                    { return(IF); }
@@ -49,36 +49,26 @@ int errcnt = 0;
 "lib"			{ return(LIB); }
 
 {IDENT_HEAD}({IDENT_HEAD}|{DIGIT})* {
-    yylval.str_val = strdup(yytext);
     return(IDENTIFIER);
 }
 
 0[xX]{HEX_DIGIT}+{INT_SUFFIX}? {
-    yylval.int_val = strtoll(yytext, NULL, 16);
     return(CONSTANT);
 }
 
 0[0-7]*{INT_SUFFIX}? {
-    yylval.int_val = strtoll(yytext, NULL, 8);
     return(CONSTANT);
 }
 
 [1-9]{DIGIT}*{INT_SUFFIX}? {
-    yylval.int_val = strtoll(yytext, NULL, 10);
     return(CONSTANT);
 }
 
 L?\'(\\.|[^\'\\\n])+\' {
-    if (yytext[0] == 'L') {
-        yylval.int_val = yytext[2];
-    } else {
-        yylval.int_val = yytext[1];
-    }
     return(CONSTANT);
 }
 
 L?\"(\\.|[^\"\\\n])*\" {
-    yylval.str_val = strdup(yytext);
     return(STRING_LITERAL);
 }
 
