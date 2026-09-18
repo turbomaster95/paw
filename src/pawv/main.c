@@ -8,9 +8,13 @@
 #include <unistd.h>
 #include <nu.h>
 #include <vm.h>
+
+#ifndef WASI
 #include <dyncall.h>
 #include <dynload.h>
 #include <pawffi.h>
+#endif
+
 #include <lson.h>
 
 #define NEED_BASENAME
@@ -23,13 +27,18 @@
 nu_mm_t *g_mm = NULL;
 char backing[1024 * 1024 * 8];
 char *current_filename = NULL;
+
+#ifndef WASI
 DCCallVM *g_vm_ffi = NULL;
+#endif
+
 LsonTranslator *g_translator = NULL;
 
 #define MAX_PAW_LIBRARIES 64
 #define MAX_PAW_FUNCTIONS 512
 #define PAW_FFI_UNKNOWN 7
 
+#ifndef WASI
 typedef struct {
     char *requested_name;
     char *resolved_path;
@@ -433,6 +442,7 @@ static int ffi_check_types(VM *vm, paw_runtime_function_t *runtime_fn) {
 
     return 1;
 }
+#endif
 
 static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
     switch (sys_code) {
@@ -456,6 +466,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
             break;
         }
 
+#ifndef WASI
         case PAW_SYS_FFI_LOOKUP: {
             const char *library_name = VM_get_string(vm, vm->regs[0]);
             const char *symbol_name = VM_get_string(vm, vm->regs[1]);
@@ -569,7 +580,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
 
             break;
         }
-
+#endif
         default:
             fprintf(stderr, _("Fault: Unhandled System Call %u\n"), sys_code);
             vm->is_running = 0;
@@ -577,6 +588,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
     }
 }
 
+#ifndef WASI
 static void cleanup_paw_libraries(void) {
     for (size_t i = 0; i < g_library_count; ++i) {
         if (g_libraries[i].handle) dlFreeLibrary(g_libraries[i].handle);
@@ -587,6 +599,7 @@ static void cleanup_paw_libraries(void) {
     g_library_count = 0;
     g_function_count = 0;
 }
+#endif
 
 int main(int argc, char **argv) {
     g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
@@ -642,6 +655,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+#ifndef WASI
     g_vm_ffi = dcNewCallVM(4096);
 
     if (!g_vm_ffi) {
@@ -651,6 +665,7 @@ int main(int argc, char **argv) {
     }
 
     dcMode(g_vm_ffi, DC_CALL_C_DEFAULT);
+#endif
 
     current_filename = argv[1];
     vm->syscall_handler = custom_syscalls;
@@ -659,16 +674,20 @@ int main(int argc, char **argv) {
 
     if (ret != 0) {
         glog_log(NULL, 0, 0, GLOG_FATAL, _("Couldn't run bytecode file: %s, errcode: %d"), current_filename, ret);
+#ifndef WASI
         cleanup_paw_libraries();
         dcFree(g_vm_ffi);
+#endif
         nu_mm_destroy(g_mm);
         return EXIT_FAILURE;
     }
 
     VM_clear_strings(vm);
-    cleanup_paw_libraries();
 
+#ifndef WASI
+    cleanup_paw_libraries();
     if (g_vm_ffi) dcFree(g_vm_ffi);
+#endif
 
     nu_mm_destroy(g_mm);
     return ret;

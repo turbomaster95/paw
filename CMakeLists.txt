@@ -12,7 +12,7 @@ set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
 if("${PAW_TARGET}" STREQUAL "wasi")
     set(CMAKE_SYSTEM_NAME Generic CACHE STRING "" FORCE)
     set(CMAKE_C_COMPILER clang CACHE STRING "" FORCE)
-    set(CMAKE_C_FLAGS "--target=wasm32-wasip1" CACHE STRING "" FORCE)
+    set(CMAKE_C_FLAGS "--target=wasm32-wasip1 -DWASI" CACHE STRING "" FORCE)
 endif()
 
 project(paw C)
