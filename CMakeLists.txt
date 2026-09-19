@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.11)
+set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
+
+if("${PAW_TARGET}" STREQUAL "wasi")
+    set(CMAKE_SYSROOT "/usr/share/wasi-sysroot")
+endif()
 
 find_program(CCACHE_PROGRAM ccache)
 
@@ -7,7 +12,6 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
-set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
 
 if("${PAW_TARGET}" STREQUAL "wasi")
     set(CMAKE_SYSTEM_NAME Generic CACHE STRING "" FORCE)
@@ -25,6 +29,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_compile_options(-Wno-unused)
 
 if("${PAW_TARGET}" STREQUAL "wasi")
+    add_compile_options(-w)
     add_compile_definitions(
         _WASI_EMULATED_PROCESS_CLOCKS
         PK_ENABLE_SOCKET=0
@@ -77,16 +82,29 @@ if(NOT DOGMAONLY)
 
 	add_compile_options(-I${CMAKE_CURRENT_SOURCE_DIR}/src/common)
 
-	add_executable(pawc ${PAWC_SRCS})
-	target_link_libraries(pawc PRIVATE nu_static dogma_s)
+	if("${PAW_TARGET}" STREQUAL "wasi")
+		add_executable(pawc.wasm ${PAWC_SRCS})
+		target_link_libraries(pawc.wasm PRIVATE nu_static dogma_s)
+	endif()
+
+	if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+		add_executable(pawc ${PAWC_SRCS})
+		target_link_libraries(pawc PRIVATE nu_static dogma_s)
+	endif()
 
 	file(GLOB PAWV_SRCS "src/pawv/*.c")
 
-	add_executable(pawv ${PAWV_SRCS})
+	if("${PAW_TARGET}" STREQUAL "wasi")
+		add_executable(pawv.wasm ${PAWV_SRCS})
+	endif()
+
+	if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+		add_executable(pawv ${PAWV_SRCS})
+	endif()
 
 	if(NOT "${PAW_TARGET}" STREQUAL "wasi")
 	    target_link_libraries(pawv PRIVATE nu_static dyncall_s dynload_s dogma_s)
 	else()
-	    target_link_libraries(pawv PRIVATE nu_static dogma_s)
+	    target_link_libraries(pawv.wasm PRIVATE nu_static dogma_s)
 	endif()
 endif()

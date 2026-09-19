@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PAW WASM Runner</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm/css/xterm.min.css">
+</head>
+<body>
+  <h2>PAW Output:</h2>
+  <div id="output" style="background: #111; color: #0f0; padding: 1em;"></div>
+
+  <script type="module">
+    import { Terminal } from 'https://cdn.jsdelivr.net/npm/@xterm/xterm/+esm';
+    import { WASI, OpenFile, File, PreopenDirectory, ConsoleStdout } from 'https://cdn.jsdelivr.net/npm/@bjorn3/browser_wasi_shim/+esm';
+
+    async function run() {
+      var term = new Terminal({ convertEol: true });
+
+      term.open(document.getElementById('output'));
+
+      const bytecodeRes = await fetch('/script.pawv');
+      const bytecodeBytes = new Uint8Array(await bytecodeRes.arrayBuffer());
+
+      const contents = new Map([
+        ["script.pawv", new File(bytecodeBytes)]
+      ]);
+      const rootDir = new PreopenDirectory("/", contents);
+
+      const fds = [
+        new OpenFile(new File([])), // FD 0: stdin
+        ConsoleStdout.lineBuffered((line) => { term.write(line + '\n'); }), // FD 1: stdout
+        ConsoleStdout.lineBuffered((line) => { term.write(line + '\n'); }), // FD 2: stderr
+        rootDir // FD 3: Virtual / directory
+      ];
+
+      const args = ["pawv.wasm", "/script.pawv"];
+      const env = [];
+      const wasi = new WASI(args, env, fds);
+
+      // 5. Instantiate and start WASM module
+      const response = await fetch('/build/pawv.wasm');
+      const bytes = await response.arrayBuffer();
+      const { instance } = await WebAssembly.instantiate(bytes, {
+        wasi_snapshot_preview1: wasi.wasiImport
+      });
+
+      wasi.start(instance);
+    }
+
+    run().catch(console.error);
+  </script>
+
+</body>
+</html>
