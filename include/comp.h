@@ -2,6 +2,7 @@
 #define COMP_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #define MAX_BUFFER_SIZE 8192
 
@@ -63,10 +64,18 @@ struct Symb {
     VarScope scope;
     int location;
     int val;
+
+    int is_array;
+    size_t array_size;
+    size_t elem_size;
+    int storage_allocated;
+    int is_const;
+
     int is_ffi;
     char *ffi_library;
     char *ffi_symbol;
     ffi_signature_t ffi_signature;
+
     struct Symb *next;
 };
 

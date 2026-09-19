@@ -40,7 +40,9 @@
     X(AST_EXTERN_DECL) \
     X(AST_LIB_DECL) \
     X(AST_FFI_CALL) \
-    X(AST_CAST)
+    X(AST_CAST) \
+    X(AST_ARRAY_INDEX) \
+    X(AST_ARRAY_SIZE)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

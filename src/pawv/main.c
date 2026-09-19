@@ -580,6 +580,15 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
 
             break;
         }
+#else
+        case PAW_SYS_FFI_CHECK:
+        case PAW_SYS_FFI_CALL:
+        case PAW_SYS_FFI_PRINT: 
+	case PAW_SYS_FFI_LOOKUP: {
+	    fprintf(stderr, _("FFI: Unavailable in WASI Mode\n"));
+	    break;
+	}
+
 #endif
         default:
             fprintf(stderr, _("Fault: Unhandled System Call %u\n"), sys_code);

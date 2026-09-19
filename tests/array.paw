@@ -1,0 +1,28 @@
+int global_nums[4] = { 1, 2, 3, 4 };
+char global_chars[3] = { 'A', 'B', 'C' };
+
+func main() -> int {
+    int nums[5] = { 10, 20 };
+    char letters[4] = { 'x' };
+
+    int i = 1;
+
+    nums[2] = 30;
+    nums[i] = 99;
+
+    letters[1] = 'y';
+
+    print(nums[0]);
+    print(nums[1]);
+    print(nums[2]);
+    print(nums[3]);
+
+    print(letters[0]);
+    print(letters[1]);
+    print(letters[2]);
+
+    print(global_nums[3]);
+    print(global_chars[1]);
+
+    return nums[2] + global_nums[0];
+}
