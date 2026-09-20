@@ -25,7 +25,12 @@ enum TokenTypes {
     SHL,
     EXTERN,
     LIB,
-    CAST
+    CAST,
+    WHILE,
+    EQ,
+    NEQ,
+    LEQ,
+    GEQ
 };
 
 typedef enum {

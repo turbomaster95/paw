@@ -33,20 +33,26 @@ int errcnt = 0;
 "//"[^\n]*              { /* consume single line comment */ }
 ^"#line"[^\n]*          { /* consume preprocessor line marker */ }
 
+"=="                    { return(EQ); }
+"!="                    { return(NEQ); }
+"<="                    { return(LEQ); }
+">="                    { return(GEQ); }
+"->"                    { return(RARROW); }
+"<-"                    { return(LARROW); }
+"<<"                    { return(SHL); }
+">>"                    { return(SHR); }
+
 "func"                  { return(FUNC); }
-"if"                    { return(IF); }
 "int"                   { return(INT); }
 "char"                  { return(CHAR); }
 "const"                 { return(CONST); }
 "return"                { return(RETURN); }
 "printf"                { return(PRINTF); }
 "print"                 { return(PRINT); }
-"->"			{ return(RARROW); }
-"<-"			{ return(LARROW); }
-"<<"			{ return(SHL); }
-">>"			{ return(SHR); }
 "extern"		{ return(EXTERN); }
 "lib"			{ return(LIB); }
+"if"                    { return(IF); }
+"while"                    { return(WHILE); }
 
 {IDENT_HEAD}({IDENT_HEAD}|{DIGIT})* {
     return(IDENTIFIER);

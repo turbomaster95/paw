@@ -309,13 +309,19 @@ static int get_tok_precedence(int tok) {
         case '|': return 1;
         case '^': return 2;
         case '&': return 3;
+        case EQ:                    /* == */
+        case NEQ: return 4;         /* != */
+        case '<':
+        case '>':
+        case LEQ:                   /* <= */
+        case GEQ: return 5;         /* >= */
         case SHL:
-        case SHR: return 4;
+        case SHR: return 6;
         case '+':
-        case '-': return 5;
+        case '-': return 7;
         case '*':
         case '/':
-        case '%': return 6;
+        case '%': return 8;
         default: return 0;
     }
 }
@@ -332,6 +338,12 @@ static uint32_t get_ast_op_type(int tok) {
         case '^': return AST_BXOR;
         case SHL: return AST_SHL;
         case SHR: return AST_SHR;
+        case '<': return AST_LT;
+        case '>': return AST_GT;
+        case LEQ: return AST_LEQ;
+        case GEQ: return AST_GEQ;
+        case EQ:  return AST_EQ;
+        case NEQ: return AST_NEQ;
         default: return 0;
     }
 }
@@ -844,6 +856,19 @@ void parse_extern_decl(nu_ast_node_t *root) {
     }
 }
 
+void parse_while_stmt(nu_ast_node_t *root) {
+    expect(WHILE, _("Expected 'while'"));
+    expect('(', _("Expected '(' after 'while'"));
+
+    nu_ast_node_t *while_node = newnode(root, AST_WHILE_STMT);
+
+    parse_expression(while_node);
+
+    expect(')', _("Expected ')' after condition"));
+
+    parse_block(while_node);
+}
+
 static void parse_statement(nu_ast_node_t *root) {
     switch (current_tok) {
         case EXTERN:
@@ -860,6 +885,10 @@ static void parse_statement(nu_ast_node_t *root) {
 
         case FUNC:
             parse_function_decl(root);
+            break;
+
+        case WHILE:
+            parse_while_stmt(root);
             break;
 
         case CONST:

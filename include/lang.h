@@ -42,7 +42,14 @@
     X(AST_FFI_CALL) \
     X(AST_CAST) \
     X(AST_ARRAY_INDEX) \
-    X(AST_ARRAY_SIZE)
+    X(AST_ARRAY_SIZE) \
+    X(AST_WHILE_STMT) \
+    X(AST_LT) \
+    X(AST_GT) \
+    X(AST_LEQ) \
+    X(AST_GEQ) \
+    X(AST_EQ) \
+    X(AST_NEQ)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

@@ -37,7 +37,6 @@
       const env = [];
       const wasi = new WASI(args, env, fds);
 
-      // 5. Instantiate and start WASM module
       const response = await fetch('/build/pawv.wasm');
       const bytes = await response.arrayBuffer();
       const { instance } = await WebAssembly.instantiate(bytes, {

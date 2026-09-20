@@ -63,18 +63,18 @@ endif()
 add_subdirectory(lib/nu)
 
 find_package(FLEX REQUIRED)
-flex_target(DogLexer src/dogma/lex.l ${CMAKE_CURRENT_BINARY_DIR}/dogma/lex.yy.c)
+flex_target(Dogmatic src/dogma/lex.l ${CMAKE_CURRENT_BINARY_DIR}/dogma/lex.yy.c)
 
 file(GLOB DOGMA_SRCS "src/dogma/*.c")
 list(APPEND DOGMA_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/common/lson.c")
 
 add_compile_options(-Wall -Wextra -include ${CMAKE_CURRENT_SOURCE_DIR}/include/prel.h)
 
-add_library(dogma_s STATIC ${DOGMA_SRCS} ${FLEX_DogLexer_OUTPUTS})
+add_library(dogma_s STATIC ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
 set_target_properties(dogma_s PROPERTIES OUTPUT_NAME dogma)
 target_link_libraries(dogma_s PRIVATE nu_static)
 
-add_library(dogma_d SHARED ${DOGMA_SRCS} ${FLEX_DogLexer_OUTPUTS})
+add_library(dogma_d SHARED ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
 set_target_properties(dogma_d PROPERTIES OUTPUT_NAME dogma)
 
 if(NOT DOGMAONLY)
