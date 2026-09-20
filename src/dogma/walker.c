@@ -935,6 +935,71 @@ int compile_expr(nu_ast_node_t *node, int target_reg) {
             return target_reg;
         }
 
+	case AST_LT:
+        case AST_GT:
+        case AST_EQ:
+        case AST_NEQ:
+        case AST_LEQ:
+        case AST_GEQ: {
+            nu_ast_node_t *left = node->first_child;
+            nu_ast_node_t *right = left ? left->next_sibling : NULL;
+
+            if (!left || !right) return target_reg;
+
+            int right_reg = (target_reg == R1) ? R2 : R1;
+
+            compile_expr(left, target_reg);
+
+            emit(EMIT_PUSH(target_reg));
+            compile_expr(right, right_reg);
+            emit(EMIT_POP(target_reg));
+
+            emit(EMIT_CMP(target_reg, right_reg));
+
+            size_t cond_branch_idx = code_buf->count;
+
+            switch (node->type) {
+                case AST_LT:  emit(EMIT_JLT(0)); break;
+                case AST_GT:  emit(EMIT_JGT(0)); break;
+                case AST_EQ:  emit(EMIT_JZ(0));  break;
+                case AST_NEQ: emit(EMIT_JNZ(0)); break;
+                case AST_LEQ:
+                    emit(EMIT_JLT(0));
+                    emit(EMIT_JZ(0));
+                    break;
+                case AST_GEQ:
+                    emit(EMIT_JGT(0));
+                    emit(EMIT_JZ(0));
+                    break;
+                default: break;
+            }
+
+            emit(EMIT_LOAD(target_reg, 0));
+            size_t skip_idx = code_buf->count;
+            emit(EMIT_JMP(0));
+
+            size_t true_pc = code_buf->count;
+            emit(EMIT_LOAD(target_reg, 1));
+            size_t end_pc = code_buf->count;
+
+            if (node->type == AST_LEQ || node->type == AST_GEQ) {
+                code_buf->instructions[cond_branch_idx]     = (node->type == AST_LEQ) ? EMIT_JLT(true_pc) : EMIT_JGT(true_pc);
+                code_buf->instructions[cond_branch_idx + 1] = EMIT_JZ(true_pc);
+            } else {
+                switch (node->type) {
+                    case AST_LT:  code_buf->instructions[cond_branch_idx] = EMIT_JLT(true_pc); break;
+                    case AST_GT:  code_buf->instructions[cond_branch_idx] = EMIT_JGT(true_pc); break;
+                    case AST_EQ:  code_buf->instructions[cond_branch_idx] = EMIT_JZ(true_pc);  break;
+                    case AST_NEQ: code_buf->instructions[cond_branch_idx] = EMIT_JNZ(true_pc); break;
+                    default: break;
+                }
+            }
+
+            code_buf->instructions[skip_idx] = EMIT_JMP(end_pc);
+
+            return target_reg;
+        }
+
         case AST_FUNC_CALL: {
             nu_ast_node_t *target_fn = NULL;
 
@@ -1208,6 +1273,34 @@ void compile_node(nu_ast_node_t *node) {
         case AST_FFI_CALL:
             compile_expr(node, R0);
             break;
+
+	case AST_WHILE_STMT: {
+            nu_ast_node_t *cond = node->first_child;
+            nu_ast_node_t *body = cond ? cond->next_sibling : NULL;
+
+            if (!cond) break;
+
+            size_t start_pc = code_buf->count;
+
+            int cond_reg = R5;
+            compile_expr(cond, cond_reg);
+
+            emit(EMIT_CMPI(cond_reg, 0));
+
+            size_t jz_idx = code_buf->count;
+            emit(EMIT_JZ(0));
+
+            if (body) {
+                compile_node(body);
+            }
+
+            emit(EMIT_JMP(start_pc));
+
+            size_t exit_pc = code_buf->count;
+            code_buf->instructions[jz_idx] = EMIT_JZ(exit_pc);
+
+            break;
+        }
 
         case AST_EXTERN_DECL:
         case AST_LIB_DECL:

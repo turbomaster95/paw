@@ -59,6 +59,7 @@ typedef struct {
 
 #define EMIT_LOAD(dest_r, imm_val)         INST_MOV(dest_r, imm_val)
 #define EMIT_MOV(dest_r, src_r)            INST_MOVR(dest_r, src_r)
+#define EMIT_MOVPC(dest_r)                 INST_MOVPC(dest_r)
 
 #define EMIT_ADD(dest_r, src1_r, src2_r)   INST_ADD(dest_r, src2_r)
 #define EMIT_ADDI(dest_r, src_r, imm_val)  INST_ADDI(dest_r, imm_val)
@@ -84,11 +85,16 @@ typedef struct {
 #define EMIT_CMPI(r1, imm_val)             INST_CMPI(r1, imm_val)
 
 #define EMIT_JMP(addr)                     INST_JMP(addr)
-#define EMIT_JMPO(off_addr)                INST_JMPO(off_addr)
 #define EMIT_JZ(addr)                      INST_JZ(addr)
 #define EMIT_JNZ(addr)                     INST_JNZ(addr)
 #define EMIT_JLT(addr)                     INST_JLT(addr)
 #define EMIT_JGT(addr)                     INST_JGT(addr)
+
+#define EMIT_JMPO(off_addr)                INST_JMPO(off_addr)
+#define EMIT_JZO(off_addr)                 INST_JZO(off_addr)
+#define EMIT_JNZO(off_addr)                INST_JNZO(off_addr)
+#define EMIT_JLTO(off_addr)                INST_JLTO(off_addr)
+#define EMIT_JGTO(off_addr)                INST_JGTO(off_addr)
 
 #define EMIT_PUSH(src_r)                   INST_PUSH(src_r)
 #define EMIT_PUSHI(imm_val)                INST_PUSHI(imm_val)

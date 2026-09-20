@@ -1,9 +1,44 @@
 func main() -> int {
     int i = 0;
-
     while (i < 5) {
-        printf("i is %d\n", i);
+        printf("Ascending i: %d\n", i);
         i = i + 1;
+    }
+
+    int j = 5;
+    while (j > 0) {
+        printf("Descending j: %d\n", j);
+        j = j - 1;
+    }
+
+    int count = 1;
+    int sum = 0;
+    while (count <= 10) {
+        sum = sum + count;
+        count = count + 1;
+    }
+    printf("Sum 1..10: %d\n", sum);
+
+    int row = 0;
+    while (row < 3) {
+        int col = 0;
+        while (col < 3) {
+            printf("Cell (%d, %d)\n", row, col);
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+
+    int k = 0;
+    while (k != 3) {
+        printf("NEQ check k: %d\n", k);
+        k = k + 1;
+    }
+
+    int skip = 10;
+    while (skip < 5) {
+        printf("This should never print!\n");
+        skip = skip + 1;
     }
 
     return 0;
