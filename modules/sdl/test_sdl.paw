@@ -1,0 +1,17 @@
+extern sdl = lib("./libpaw_sdl.so");
+
+func main() -> int {
+    sdl.init(0);
+
+    int win = sdl.create_window("SDL With Paw!!", 800, 600);
+    int ren = sdl.create_renderer(win);
+
+    print("Running SDL loop from C...");
+    sdl.run_loop(ren);
+
+    sdl.destroy_renderer(ren);
+    sdl.destroy_window(win);
+    sdl.quit();
+
+    return 0;
+}

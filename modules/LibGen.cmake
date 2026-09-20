@@ -1,10 +1,9 @@
-# cmake/AddModShared.cmake
 include_guard(GLOBAL)
 
 function(add_mod_shared TARGET_NAME)
     set(options)
     set(one_value_args OUTPUT_NAME)
-    set(multi_value_args EXTRA_SRCS INCLUDE_DIRS COMPILE_DEFINITIONS)
+    set(multi_value_args EXTRA_SRCS INCLUDE_DIRS COMPILE_DEFINITIONS LINK_LIBRARIES)
 
     cmake_parse_arguments(
         MOD
@@ -64,6 +63,12 @@ function(add_mod_shared TARGET_NAME)
     if(MOD_COMPILE_DEFINITIONS)
         target_compile_definitions("${TARGET_NAME}"
             PRIVATE ${MOD_COMPILE_DEFINITIONS}
+        )
+    endif()
+
+    if(MOD_LINK_LIBRARIES)
+        target_link_libraries("${TARGET_NAME}"
+            PRIVATE ${MOD_LINK_LIBRARIES}
         )
     endif()
 
