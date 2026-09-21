@@ -74,8 +74,11 @@ add_library(dogma_s STATIC ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
 set_target_properties(dogma_s PROPERTIES OUTPUT_NAME dogma)
 target_link_libraries(dogma_s PRIVATE nu_static)
 
-add_library(dogma_d SHARED ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
-set_target_properties(dogma_d PROPERTIES OUTPUT_NAME dogma)
+
+if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+    add_library(dogma_d SHARED ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
+    set_target_properties(dogma_d PROPERTIES OUTPUT_NAME dogma)
+endif()
 
 if(NOT DOGMAONLY)
 	file(GLOB PAWC_SRCS "src/pawc/*.c")

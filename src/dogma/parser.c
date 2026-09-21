@@ -42,7 +42,7 @@ const char *tokname(int token) {
         case FUNC: return _("FUNC");
         case IF: return _("IF");
         case INT: return _("INT");
-	case ELSE: return _("ELSE");
+        case ELSE: return _("ELSE");
         case CHAR: return _("CHAR");
         case CONST: return _("CONST");
         case RETURN: return _("RETURN");
@@ -54,7 +54,7 @@ const char *tokname(int token) {
         case CONSTANT: return _("CONSTANT");
         case STRING_LITERAL: return _("STRING_LITERAL");
         case WHILE: return _("WHILE");
-	case BREAK: return _("BREAK");
+        case BREAK: return _("BREAK");
         case CONTINUE: return _("CONTINUE");
         default:
             if (token > 0 && token < 256) {

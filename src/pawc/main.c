@@ -23,7 +23,7 @@ LsonTranslator *g_translator = NULL;
 
 char *current_filename = NULL;
 
-char backing[1024 * 1024 * 8]; // 8 mb
+char backing[1024 * 1024 * 20]; // 20 mb
 
 char *get_noext_filename(const char *path) {
     if (!path) return NULL;

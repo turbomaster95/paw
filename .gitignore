@@ -8,4 +8,5 @@
 obj/
 obj-*/
 build/
+wasmbuild/
 *.pawv
