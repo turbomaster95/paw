@@ -124,6 +124,10 @@ static void module_run_loop(int renderer_id) {
     }
 }
 
+static void module_delay(int ms) {
+        SDL_Delay(ms);
+}
+
 static void module_destroy_window(int window_id) {
     SDL_Window *win = (SDL_Window *)get_handle(window_id, HANDLE_WINDOW);
     if (win) {
@@ -163,6 +167,7 @@ static const paw_ffi_function_t functions[] = {
     { .name = "fill_rect", .address = (void *)module_fill_rect, .return_type = PAW_FFI_VOID, .arg_count = 5, .args = { PAW_FFI_INT, PAW_FFI_INT, PAW_FFI_INT, PAW_FFI_INT, PAW_FFI_INT } },
     { .name = "draw_line", .address = (void *)module_draw_line, .return_type = PAW_FFI_VOID, .arg_count = 5, .args = { PAW_FFI_INT, PAW_FFI_INT, PAW_FFI_INT, PAW_FFI_INT, PAW_FFI_INT } },
     { .name = "run_loop", .address = (void *)module_run_loop, .return_type = PAW_FFI_VOID, .arg_count = 1, .args = { PAW_FFI_INT } },
+    { .name = "delay", .address = (void *)module_delay, .return_type = PAW_FFI_VOID, .arg_count = 1, .args = { PAW_FFI_INT } },
     { .name = "destroy_window", .address = (void *)module_destroy_window, .return_type = PAW_FFI_VOID, .arg_count = 1, .args = { PAW_FFI_INT } },
     { .name = "destroy_renderer", .address = (void *)module_destroy_renderer, .return_type = PAW_FFI_VOID, .arg_count = 1, .args = { PAW_FFI_INT } },
     { .name = "quit", .address = (void *)module_quit, .return_type = PAW_FFI_VOID, .arg_count = 0, .args = { 0 } }

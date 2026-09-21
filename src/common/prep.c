@@ -218,7 +218,7 @@ void add_define_obj(const char *name, const char *value) {
         }
     }
     if (num_defines >= MAX_DEFINES) {
-        fprintf(stderr, _("paw: too many defines\n"));
+        fprintf(stderr, _("too many defines\n"));
         exit(1);
     }
     Define *d = &defines[num_defines++];
@@ -267,7 +267,7 @@ void add_define_func(const char *name, const char *params_str, const char *body,
     }
 
     if (num_defines >= MAX_DEFINES) {
-        fprintf(stderr, _("paw: too many defines\n"));
+        fprintf(stderr, _("too many defines\n"));
         exit(1);
     }
     Define *d = &defines[num_defines++];
@@ -305,7 +305,7 @@ static bool is_active(void) {
 
 static void cond_push_if(bool val) {
     if (cond_depth >= MAX_COND_DEPTH) {
-        fprintf(stderr, _("paw: too many nested #if blocks\n"));
+        fprintf(stderr, _("too many nested #if blocks\n"));
         exit(1);
     }
     CondEntry *e = &cond_stack[cond_depth++];
@@ -319,7 +319,7 @@ static void cond_push_if(bool val) {
 
 static void cond_elif(bool val) {
     if (cond_depth == 0) {
-        fprintf(stderr, _("paw: #elif without #if\n"));
+        fprintf(stderr, _("#elif without #if\n"));
         exit(1);
     }
     CondEntry *e = &cond_stack[cond_depth - 1];
@@ -335,7 +335,7 @@ static void cond_elif(bool val) {
 
 static void cond_else(void) {
     if (cond_depth == 0) {
-        fprintf(stderr, _("paw: #else without #if\n"));
+        fprintf(stderr, _("#else without #if\n"));
         exit(1);
     }
     CondEntry *e = &cond_stack[cond_depth - 1];
@@ -351,7 +351,7 @@ static void cond_else(void) {
 
 static void cond_endif(void) {
     if (cond_depth == 0) {
-        fprintf(stderr, _("paw: #endif without #if\n"));
+        fprintf(stderr, _("#endif without #if\n"));
         exit(1);
     }
     cond_depth--;
@@ -792,7 +792,7 @@ void process_lines(const char *filepath, const char *content, Output *output) {
             }
             if (strcmp(dir_name, "error") == 0) {
                 if (is_active()) {
-                    fprintf(stderr, _("paw: %s:%d: #error: %s\n"), current_file, line_num, body);
+                    fprintf(stderr, _("%s:%d: #error: %s\n"), current_file, line_num, body);
                     exit(1);
                 }
                 free(line);
@@ -800,7 +800,7 @@ void process_lines(const char *filepath, const char *content, Output *output) {
             }
             if (strcmp(dir_name, "warning") == 0) {
                 if (is_active()) {
-                    fprintf(stderr, _("paw: %s:%d: #warning: %s\n"), current_file, line_num, body);
+                    fprintf(stderr, _("%s:%d: #warning: %s\n"), current_file, line_num, body);
                 }
                 free(line);
                 continue;
@@ -859,7 +859,7 @@ void process_lines(const char *filepath, const char *content, Output *output) {
                 }
                 char *resolved = resolve_include(fname, quoted, dir);
                 if (!resolved) {
-                    fprintf(stderr, _("paw: include file not found '%s'\n"), fname);
+                    fprintf(stderr, _("include file not found '%s'\n"), fname);
                     free(line);
                     continue;
                 }
@@ -886,8 +886,8 @@ void process_lines(const char *filepath, const char *content, Output *output) {
 void process_file(const char *filepath, Output *output) {
     char *content = read_file(filepath);
     if (!content) {
-        fprintf(stderr, _("paw: cannot open file: %s\n"), filepath);
-        return;
+        fprintf(stderr, _("cannot open file: %s\n"), filepath);
+	exit(1);
     }
     char marker[2048];
     snprintf(marker, sizeof(marker), "#line 1 \"%s\"\n", filepath);

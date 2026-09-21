@@ -13,6 +13,7 @@ enum TokenTypes {
     STRING_LITERAL,
     FUNC,
     IF,
+    ELSE,
     RETURN,
     INT,
     CHAR,
@@ -30,7 +31,9 @@ enum TokenTypes {
     EQ,
     NEQ,
     LEQ,
-    GEQ
+    GEQ,
+    BREAK,
+    CONTINUE
 };
 
 typedef enum {

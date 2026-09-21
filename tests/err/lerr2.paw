@@ -1,0 +1,7 @@
+func main() -> int {
+    int x = 5;
+    if (x > 2) {
+        continue;
+    }
+    return x;
+}

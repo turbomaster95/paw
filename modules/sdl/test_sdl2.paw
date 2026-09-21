@@ -20,8 +20,9 @@ func main() -> int {
 
     sdl.present(ren);
 
-    print("Running SDL loop from C...");
-    sdl.run_loop(ren);
+    while (1 > 0) {
+	sdl.delay(16);
+    }
 
     sdl.destroy_renderer(ren);
     sdl.destroy_window(win);

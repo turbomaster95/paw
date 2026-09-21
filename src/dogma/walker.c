@@ -16,6 +16,17 @@
 #define WORD_SIZE 4
 #define GLOBAL_DATA_BASE 4
 
+#define MAX_LOOP_DEPTH 64
+
+typedef struct {
+    size_t start_pc; // trg for continue
+    size_t break_jumps[128];
+    size_t break_count;
+} loop_context_t;
+
+static loop_context_t g_loop_stack[MAX_LOOP_DEPTH];
+static int g_loop_depth = 0;
+
 extern nu_ast_node_t *g_root_node;
 extern nu_mm_t *g_mm;
 
@@ -1274,6 +1285,73 @@ void compile_node(nu_ast_node_t *node) {
             compile_expr(node, R0);
             break;
 
+	case AST_IF_STMT: {
+            nu_ast_node_t *cond = node->first_child;
+            nu_ast_node_t *then_branch = cond ? cond->next_sibling : NULL;
+            nu_ast_node_t *else_branch = then_branch ? then_branch->next_sibling : NULL;
+
+            if (!cond) break;
+
+            int cond_reg = R14;
+            compile_expr(cond, cond_reg);
+
+            emit(EMIT_CMPI(cond_reg, 0));
+
+            size_t jz_idx = code_buf->count;
+            emit(EMIT_JZ(0));
+
+            if (then_branch) {
+                compile_node(then_branch);
+            }
+
+            if (else_branch) {
+                size_t jmp_exit_idx = code_buf->count;
+                emit(EMIT_JMP(0));
+
+                size_t else_pc = code_buf->count;
+                code_buf->instructions[jz_idx] = EMIT_JZ(else_pc);
+
+                compile_node(else_branch);
+
+                size_t exit_pc = code_buf->count;
+                code_buf->instructions[jmp_exit_idx] = EMIT_JMP(exit_pc);
+            } else {
+                size_t exit_pc = code_buf->count;
+                code_buf->instructions[jz_idx] = EMIT_JZ(exit_pc);
+            }
+
+            break;
+        }
+
+	case AST_CONTINUE_STMT: {
+            if (g_loop_depth <= 0) {
+                fprintf(stderr, _("Error: 'continue' outside of a loop!\n"));
+                break;
+            }
+
+            loop_context_t *ctx = &g_loop_stack[g_loop_depth - 1];
+
+            emit(EMIT_JMP(ctx->start_pc));
+            break;
+        }
+
+        case AST_BREAK_STMT: {
+            if (g_loop_depth <= 0) {
+                fprintf(stderr, _("Error: 'break' outside of a loop!\n"));
+                break;
+            }
+
+            loop_context_t *ctx = &g_loop_stack[g_loop_depth - 1];
+
+            if (ctx->break_count < (sizeof(ctx->break_jumps) / sizeof(ctx->break_jumps[0]))) {
+                ctx->break_jumps[ctx->break_count++] = code_buf->count;
+                emit(EMIT_JMP(0));
+            } else {
+                // TODO: handle max break stmt cap per loop if exceed
+            }
+            break;
+        }
+
 	case AST_WHILE_STMT: {
             nu_ast_node_t *cond = node->first_child;
             nu_ast_node_t *body = cond ? cond->next_sibling : NULL;
@@ -1290,6 +1368,15 @@ void compile_node(nu_ast_node_t *node) {
             size_t jz_idx = code_buf->count;
             emit(EMIT_JZ(0));
 
+            if (g_loop_depth >= MAX_LOOP_DEPTH) {
+                fprintf(stderr, _("Loop Error: Exceeded Maximum loop depth!\n"));
+                break;
+            }
+
+            loop_context_t *ctx = &g_loop_stack[g_loop_depth++];
+            ctx->start_pc = start_pc;
+            ctx->break_count = 0;
+
             if (body) {
                 compile_node(body);
             }
@@ -1298,6 +1385,13 @@ void compile_node(nu_ast_node_t *node) {
 
             size_t exit_pc = code_buf->count;
             code_buf->instructions[jz_idx] = EMIT_JZ(exit_pc);
+
+            for (size_t i = 0; i < ctx->break_count; i++) {
+                size_t break_idx = ctx->break_jumps[i];
+                code_buf->instructions[break_idx] = EMIT_JMP(exit_pc);
+            }
+
+            g_loop_depth--;
 
             break;
         }

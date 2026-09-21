@@ -49,7 +49,10 @@
     X(AST_LEQ) \
     X(AST_GEQ) \
     X(AST_EQ) \
-    X(AST_NEQ)
+    X(AST_NEQ) \
+    X(AST_CONTINUE_STMT) \
+    X(AST_BREAK_STMT) \
+    X(AST_IF_STMT)
 
 typedef enum {
 #define DEFINE_ENUM(name) name,

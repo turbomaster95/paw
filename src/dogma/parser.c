@@ -24,6 +24,7 @@ extern int tok_col;
 
 nu_ast_node_t *g_root_node = NULL;
 static var_type_t g_current_func_ret_type = VAR_UNKNOWN;
+static int g_loop_depth = 0;
 
 symbt *SymTable;
 
@@ -34,12 +35,14 @@ static int is_type_token(int token);
 static nu_ast_node_t *parse_primary(nu_ast_node_t *parent);
 static nu_ast_node_t *parse_postfix(void);
 static nu_ast_node_t *parse_identifier_expr(void);
+static void parse_statement(nu_ast_node_t *root);
 
 const char *tokname(int token) {
     switch (token) {
         case FUNC: return _("FUNC");
         case IF: return _("IF");
         case INT: return _("INT");
+	case ELSE: return _("ELSE");
         case CHAR: return _("CHAR");
         case CONST: return _("CONST");
         case RETURN: return _("RETURN");
@@ -50,6 +53,9 @@ const char *tokname(int token) {
         case IDENTIFIER: return _("IDENTIFIER");
         case CONSTANT: return _("CONSTANT");
         case STRING_LITERAL: return _("STRING_LITERAL");
+        case WHILE: return _("WHILE");
+	case BREAK: return _("BREAK");
+        case CONTINUE: return _("CONTINUE");
         default:
             if (token > 0 && token < 256) {
                 static char buf[2] = {0};
@@ -61,7 +67,7 @@ const char *tokname(int token) {
 }
 
 void synerr(int line, int col, const char *msg) {
-    glog_log(current_filename, line, col, GLOG_ERROR, _("Syntax Error: %s"), msg);
+    glog_log(current_filename, line - 1, col, GLOG_ERROR, _("Syntax Error: %s"), msg);
     exit(EXIT_FAILURE);
 }
 
@@ -516,6 +522,24 @@ static void parse_array_suffix(nu_ast_node_t *decl_node, symb *sym, int require_
     expect(';', _("Expected ';' after array declaration"));
 }
 
+void parse_break_stmt(nu_ast_node_t *root) {
+    if (g_loop_depth == 0) {
+        synerr(yylineno, tok_col, _("'break' statement not within a loop"));
+    }
+    expect(BREAK, _("Expected 'break'"));
+    newnode(root, AST_BREAK_STMT);
+    expect(';', _("Expected ';' after 'break'"));
+}
+
+void parse_continue_stmt(nu_ast_node_t *root) {
+    if (g_loop_depth == 0) {
+        synerr(yylineno, tok_col, _("'continue' statement not within a loop"));
+    }
+    expect(CONTINUE, _("Expected 'continue'"));
+    newnode(root, AST_CONTINUE_STMT);
+    expect(';', _("Expected ';' after 'continue'"));
+}
+
 void parse_return_stmt(nu_ast_node_t *root) {
     expect(RETURN, _("Expected 'return'"));
 
@@ -866,7 +890,37 @@ void parse_while_stmt(nu_ast_node_t *root) {
 
     expect(')', _("Expected ')' after condition"));
 
+    g_loop_depth++;
     parse_block(while_node);
+    g_loop_depth--;
+}
+
+void parse_if_stmt(nu_ast_node_t *root) {
+    expect(IF, _("Expected 'if'"));
+    expect('(', _("Expected '(' after 'if'"));
+
+    nu_ast_node_t *if_node = newnode(root, AST_IF_STMT);
+
+    parse_expression(if_node);
+
+    expect(')', _("Expected ')' after condition"));
+
+    if (match('{')) {
+        parse_block(if_node);
+    } else {
+        parse_statement(if_node);
+    }
+
+    if (match(ELSE)) {
+        advance();
+        if (match('{')) {
+            parse_block(if_node);
+        } else if (match(IF)) {
+            parse_if_stmt(if_node);
+        } else {
+            parse_statement(if_node);
+        }
+    }
 }
 
 static void parse_statement(nu_ast_node_t *root) {
@@ -891,6 +945,14 @@ static void parse_statement(nu_ast_node_t *root) {
             parse_while_stmt(root);
             break;
 
+	case BREAK:
+            parse_break_stmt(root);
+            break;
+
+        case CONTINUE:
+            parse_continue_stmt(root);
+            break;
+
         case CONST:
             parse_constvar_decl(root);
             break;
@@ -905,6 +967,10 @@ static void parse_statement(nu_ast_node_t *root) {
 
         case CHAR:
             parse_char_decl(root);
+            break;
+
+	case IF:
+            parse_if_stmt(root);
             break;
 
         case IDENTIFIER: {

@@ -1,9 +1,13 @@
 func main() -> int {
     int i = 0;
-    while (i < 5) {
-        printf("Ascending i: %d\n", i);
+    while (i < 10) {
+        if (i == 3) {
+            break;
+        }
+        printf("Looping i: %d\n", i);
         i = i + 1;
     }
+    printf("After break i: %d\n", i);
 
     return i;
 }

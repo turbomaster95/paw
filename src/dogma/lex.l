@@ -52,7 +52,9 @@ int errcnt = 0;
 "extern"		{ return(EXTERN); }
 "lib"			{ return(LIB); }
 "if"                    { return(IF); }
-"while"                    { return(WHILE); }
+"while"                 { return(WHILE); }
+"break"                 { return(BREAK); }
+"continue"              { return(CONTINUE); }
 
 {IDENT_HEAD}({IDENT_HEAD}|{DIGIT})* {
     return(IDENTIFIER);
