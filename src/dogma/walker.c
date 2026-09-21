@@ -1282,7 +1282,7 @@ void compile_node(nu_ast_node_t *node) {
 
             size_t start_pc = code_buf->count;
 
-            int cond_reg = R5;
+            int cond_reg = R14;
             compile_expr(cond, cond_reg);
 
             emit(EMIT_CMPI(cond_reg, 0));
@@ -1333,17 +1333,23 @@ void compile_node(nu_ast_node_t *node) {
 
             int fmt_id = vm_register_format(realfmt);
 
-            emit(EMIT_LOAD(R0, fmt_id));
-
             int count = 0;
-            int reg_base = 1;
-
             nu_ast_node_t *arg = fmt_node->next_sibling;
+            int target_regs[16];
 
-            while (arg && count < MAX_REGS - 2) {
-                compile_expr(arg, reg_base + count);
+            while (arg && count < 16) {
+                target_regs[count] = R10 + count; // R10, R11, R12...
+
+                compile_expr(arg, R1);
+                emit(EMIT_MOV(target_regs[count], R1));
                 count++;
                 arg = arg->next_sibling;
+            }
+
+            emit(EMIT_LOAD(R0, fmt_id));
+
+            for (int i = 0; i < count; i++) {
+                emit(EMIT_MOV(R1 + i, target_regs[i]));
             }
 
             emit(EMIT_SYS(PAW_SYS_PRINTF));
@@ -1565,7 +1571,6 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
     }
 
     fwrite(&str_count, sizeof(uint32_t), 1, f);
-
     for (uint32_t i = 0; i < str_count; i++) {
         const char *str = vm_get_string(i);
         uint32_t len = str ? (uint32_t)strlen(str) : 0;
@@ -1577,12 +1582,7 @@ bool write_bytecode_file(const char *filename, const BytecodeBuffer *buf) {
         }
     }
 
-    fwrite(
-        buf->instructions,
-        sizeof(Instruction),
-        buf->count,
-        f
-    );
+    fwrite(buf->instructions, sizeof(Instruction), buf->count, f);
 
     fclose(f);
     return true;
@@ -1645,4 +1645,5 @@ void dogma_ast2file(nu_ast_node_t *node, const char *out_filename) {
         nu_free(g_mm, code_buf);
         code_buf = NULL;
     }
+    vm_clear_string_table();
 }

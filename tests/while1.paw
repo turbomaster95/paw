@@ -1,0 +1,9 @@
+func main() -> int {
+    int i = 0;
+    while (i < 5) {
+        printf("Ascending i: %d\n", i);
+        i = i + 1;
+    }
+
+    return i;
+}

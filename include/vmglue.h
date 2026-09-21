@@ -19,9 +19,9 @@ typedef int64_t  i64;
 
 #define MAX_REGS 16
 #define UF_REGS (MAX_REGS - 1)
-#define MAX_STACK_SIZE 512
+#define MAX_STACK_SIZE 2048
 
-#define ROM_SIZE 2048
+#define ROM_SIZE 65536
 #define RAM_SIZE 65536
 
 #define VM_MAGIC 0x56574150

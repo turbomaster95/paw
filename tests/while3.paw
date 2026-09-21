@@ -1,0 +1,11 @@
+func main() -> int {
+    int count = 1;
+    int sum = 0;
+    while (count <= 10) {
+        sum = sum + count;
+        count = count + 1;
+    }
+    printf("Sum 1..10: %d\n", sum);
+
+    return sum;
+}

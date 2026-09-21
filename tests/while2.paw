@@ -1,0 +1,9 @@
+func main() -> int {
+    int j = 5;
+    while (j > 0) {
+        printf("Descending j: %d\n", j);
+        j = j - 1;
+    }
+
+    return j;
+}

@@ -460,9 +460,11 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
 
         case PAW_SYS_PRINTF: {
             const char *fmt = VM_get_string(vm, vm->regs[0]);
-
-            if (fmt) VM_printf(vm, mem, 1, 15, fmt);
-
+	    if (fmt) {
+        	   VM_printf(vm, mem, 1, 15, fmt);
+	    } else {
+	           fprintf(stderr, "DEBUG: String was NULL!\n");
+	    }
             break;
         }
 

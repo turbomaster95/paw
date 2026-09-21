@@ -9,6 +9,7 @@ int vm_register_string(const char* s);
 int vm_register_format(const char* s);
 uint32_t vm_get_string_count(void);
 const char* vm_get_string(uint32_t id);
+void vm_clear_string_table(void);
 
 #else
 
@@ -24,7 +25,12 @@ int vm_register_string(const char* s) {
         }
     }
 
-    g_str_table[g_str_count] = s;
+    char *persistent_copy = strdup(s);
+    if (!persistent_copy) {
+        return -1; // oom
+    }
+
+    g_str_table[g_str_count] = persistent_copy;
     return (int)(g_str_count++);
 }
 
@@ -34,6 +40,16 @@ int vm_register_format(const char* s) {
 
 uint32_t vm_get_string_count(void) {
     return g_str_count;
+}
+
+void vm_clear_string_table(void) {
+    for (uint32_t i = 0; i < g_str_count; i++) {
+        if (g_str_table[i]) {
+            free((char*)g_str_table[i]);
+            g_str_table[i] = NULL;
+        }
+    }
+    g_str_count = 0;
 }
 
 const char* vm_get_string(uint32_t id) {
