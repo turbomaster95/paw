@@ -43,7 +43,7 @@ char *get_noext_filename(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
+    g_mm = nu_mm_create(NU_MM_SLOB, backing, sizeof(backing));
     if (!g_mm) {
         fprintf(stderr, "Fatal: Failed to allocate memory arena.\n");
         return EXIT_FAILURE;

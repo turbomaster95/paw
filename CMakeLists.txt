@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.11)
 set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
+set(NEED_DBG "no" CACHE STRING "Enable Debug symbols (yes|no)")
+set(NEED_ASAN "" CACHE STRING "Enable ASAN (yes|no)")
 
 if("${PAW_TARGET}" STREQUAL "wasi")
     set(CMAKE_SYSROOT "/usr/share/wasi-sysroot")
@@ -58,6 +60,15 @@ if(NOT "${PAW_TARGET}" STREQUAL "wasi")
         ${dyncall_SOURCE_DIR}/dyncall
         ${dyncall_SOURCE_DIR}/dynload
     )
+endif()
+
+if("${NEED_DBG}" STREQUAL "yes")
+    add_compile_options(-g -O0)
+endif()
+
+if("${NEED_ASAN}" STREQUAL "yes")
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address)
 endif()
 
 add_subdirectory(lib/nu)

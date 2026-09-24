@@ -147,10 +147,13 @@ static nu_ast_node_t *newnode(nu_ast_node_t *parent, uint32_t type) {
 }
 
 static nu_ast_node_t *newstrnode(nu_ast_node_t *parent, uint32_t type, const char *str) {
-    nu_ast_node_t *node = newnode(parent, type);
+    if (!str) return parent;
 
-    if (str) {
-        nu_ast_set_str(g_ast, node, str, strlen(str));
+    nu_ast_node_t *node = newnode(parent, type);
+    char *strd = nu_strdup(str);
+
+    if (strd) {
+        nu_ast_set_str(g_ast, node, strd, strlen(str));
     }
 
     return node;

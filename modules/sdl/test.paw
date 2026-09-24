@@ -1,0 +1,102 @@
+extern sdl = lib("./libpaw_sdl.so");
+
+// Point-in-rect check using renamed parameters to avoid symbol conflicts
+func is_hovered(int mx, int my, int rx, int ry, int rw, int rh) -> int {
+    if (mx < rx) { return 0; }
+    if (mx > rx + rw) { return 0; }
+    if (my < ry) { return 0; }
+    if (my > ry + rh) { return 0; }
+    return 1;
+}
+
+func main() -> int {
+    sdl.init(0);
+
+    int win = sdl.create_window("Paw SDL - Interactive Buttons", 800, 600);
+    int ren = sdl.create_renderer(win);
+
+    // Button 1 bounds
+    int b1_x = 100;
+    int b1_y = 100;
+    int b1_w = 160;
+    int b1_h = 50;
+
+    // Button 2 bounds
+    int b2_x = 300;
+    int b2_y = 100;
+    int b2_w = 160;
+    int b2_h = 50;
+
+    int running = 1;
+    int mx = 0;
+    int my = 0;
+
+    while (running > 0) {
+        mx = sdl.mouse_x();
+        my = sdl.mouse_y();
+        int left_click = sdl.mouse_down(1);
+
+        // Clear background
+        sdl.set_draw_color(ren, 24, 28, 36, 255);
+        sdl.clear(ren);
+
+        // --- Button 1 Logic & Render ---
+        int b1_hover = is_hovered(mx, my, b1_x, b1_y, b1_w, b1_h);
+        int b1_drawn = 0;
+
+        if (b1_hover > 0) {
+            if (left_click > 0) {
+                // Click state (Dark Red)
+                sdl.set_draw_color(ren, 150, 30, 30, 255);
+                b1_drawn = 1;
+            }
+            if (b1_drawn == 0) {
+                // Hover state (Bright Red)
+                sdl.set_draw_color(ren, 255, 80, 80, 255);
+                b1_drawn = 1;
+            }
+        }
+        if (b1_drawn == 0) {
+            // Default state (Red)
+            sdl.set_draw_color(ren, 220, 50, 50, 255);
+        }
+        sdl.fill_rect(ren, b1_x, b1_y, b1_w, b1_h);
+
+        // --- Button 2 Logic & Render ---
+        int b2_hover = is_hovered(mx, my, b2_x, b2_y, b2_w, b2_h);
+        int b2_drawn = 0;
+
+        if (b2_hover > 0) {
+            if (left_click > 0) {
+                // Click state (Dark Blue)
+                sdl.set_draw_color(ren, 30, 90, 160, 255);
+                b2_drawn = 1;
+            }
+            if (b2_drawn == 0) {
+                // Hover state (Bright Blue)
+                sdl.set_draw_color(ren, 80, 160, 245, 255);
+                b2_drawn = 1;
+            }
+        }
+        if (b2_drawn == 0) {
+            // Default state (Blue)
+            sdl.set_draw_color(ren, 52, 152, 219, 255);
+        }
+        sdl.fill_rect(ren, b2_x, b2_y, b2_w, b2_h);
+
+        // --- Keyboard Indicator (Spacebar = 32) ---
+        if (sdl.key_down(32) > 0) {
+            sdl.set_draw_color(ren, 46, 204, 113, 255);
+            sdl.fill_rect(ren, 100, 200, 360, 20);
+        }
+
+        sdl.present(ren);
+        sdl.delay(16);
+    }
+
+    sdl.destroy_renderer(ren);
+    sdl.destroy_window(win);
+    sdl.quit();
+
+    return 0;
+}

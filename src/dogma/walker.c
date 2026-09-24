@@ -343,14 +343,15 @@ static int ffi_expr_type(nu_ast_node_t *node) {
             if (node->val.str[0] == '\'') return PAW_FFI_CHAR;
             return PAW_FFI_INT;
 
-        case AST_IDENT: {
-            symb *sym = symtab_lookup(SymTable, node->val.str);
+	case AST_IDENT: {
+	    if (!node->val.str) return FFI_TYPE_UNKNOWN;
 
-            if (!sym) return FFI_TYPE_UNKNOWN;
-            if (sym->type == VAR_CHAR) return PAW_FFI_CHAR;
+	    symb *sym = symtab_lookup(SymTable, node->val.str);
+	    if (!sym) return FFI_TYPE_UNKNOWN;
+	    if (sym->type == VAR_CHAR) return PAW_FFI_CHAR;
 
-            return PAW_FFI_INT;
-        }
+	    return PAW_FFI_INT;
+	}
 
         case AST_ARRAY_INDEX:
             return expr_var_type(node) == VAR_CHAR ? PAW_FFI_CHAR : PAW_FFI_INT;
@@ -681,6 +682,8 @@ static int compile_assignment_node(nu_ast_node_t *node, int target_reg) {
         );
         return target_reg;
     }
+
+    fprintf(stderr, _("DEBUG: Param '%s' is_array=%d\n"), var_name, sym->is_array);
 
     if (sym->is_array) {
         fprintf(
