@@ -31,11 +31,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wno-unused)
 
-if("${PAW_STATIC}" STREQUAL "yes")
-    add_compile_options(-static)
-    add_link_options(-static)
-endif()
-
 if("${PAW_TARGET}" STREQUAL "wasi")
     add_compile_options(-w)
     add_compile_definitions(
@@ -66,6 +61,27 @@ if(NOT "${PAW_TARGET}" STREQUAL "wasi")
         ${dyncall_SOURCE_DIR}/dyncall
         ${dyncall_SOURCE_DIR}/dynload
     )
+endif()
+
+
+if("${PAW_STATIC}" STREQUAL "yes")
+    add_executable(pawd src/pawv/pawd/main.c)
+    target_link_libraries(pawd PRIVATE dl pthread dyncall_s dynload_s)
+
+    find_program(XXD_EXECUTABLE xxd REQUIRED)
+
+    add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/pawd_emb.h
+	DEPENDS pawd
+	COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/src/pawv/pawd/bin2c.py ${CMAKE_CURRENT_BINARY_DIR}/pawd pawd_bin > ${CMAKE_CURRENT_BINARY_DIR}/pawd_emb.h
+	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+	COMMENT "Embedding pawd binary into pawd_emb.h"
+   )
+endif()
+
+if("${PAW_STATIC}" STREQUAL "yes")
+    add_compile_options(-DPAW_STATIC -static)
+    add_link_options(-static)
 endif()
 
 if("${NEED_DBG}" STREQUAL "yes")
@@ -113,6 +129,10 @@ if(NOT DOGMAONLY)
 	endif()
 
 	file(GLOB PAWV_SRCS "src/pawv/*.c")
+
+	if("${PAW_STATIC}" STREQUAL "yes")
+		list(APPEND PAWV_SRCS "${CMAKE_CURRENT_BINARY_DIR}/pawd_emb.h")
+	endif()
 
 	if("${PAW_TARGET}" STREQUAL "wasi")
 		add_executable(pawv.wasm ${PAWV_SRCS})
