@@ -1,6 +1,4 @@
-#define _GNU_SOURCE
 #define GLOG_IMPL
-
 #include <glog.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -8,25 +6,17 @@
 #include <string.h>
 #include <limits.h>
 #include <unistd.h>
-#include <sys/mman.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
 #include <nu.h>
 #include <vm.h>
 
 #ifndef WASI
 #include <dyncall.h>
-#include <dynload.h>
-#include <pawffi.h>
-#endif
-
 #ifdef PAW_STATIC
-#include <pthread.h>
-#include <sys/syscall.h>
-#include "ipc.h"
-#include "pawd_emb.h"
+#include <dlfcn.h>
+#else
+#include <dynload.h>
+#endif
+#include <pawffi.h>
 #endif
 
 #include <lson.h>
@@ -39,7 +29,7 @@
 #include <nosry/disasm.h>
 
 nu_mm_t *g_mm = NULL;
-char backing[1024 * 1024 * 8];
+char backing[1024 * 1024 * 20];
 char *current_filename = NULL;
 
 #ifndef WASI
@@ -53,17 +43,15 @@ LsonTranslator *g_translator = NULL;
 #define PAW_FFI_UNKNOWN 7
 
 #ifndef WASI
-
 typedef struct {
     char *requested_name;
     char *resolved_path;
-#ifndef PAW_STATIC
-    DLLib *handle;
-#else
+#ifdef PAW_STATIC
     void *handle;
+#else
+    DLLib *handle;
 #endif
     const paw_library_t *info;
-    paw_ffi_function_t *cloned_functions;
 } paw_loaded_library_t;
 
 typedef struct {
@@ -79,238 +67,6 @@ static size_t g_function_count = 0;
 static paw_ffi_type_t g_last_ffi_type = PAW_FFI_VOID;
 static uintptr_t g_last_ffi_value = 0;
 static int g_last_ffi_valid = 0;
-
-#ifdef PAW_STATIC
-
-static int g_pawd_shm_fd = -1;
-static SharedIPC *g_pawd_shm = NULL;
-static pid_t g_pawd_pid = -1;
-static char g_pawd_bin_path[PATH_MAX];
-
-static int ipc_put_u32(unsigned char **ptr, size_t *left, uint32_t value) {
-    if (!ptr || !*ptr || !left || *left < sizeof(uint32_t)) return 0;
-
-    memcpy(*ptr, &value, sizeof(uint32_t));
-    *ptr += sizeof(uint32_t);
-    *left -= sizeof(uint32_t);
-
-    return 1;
-}
-
-static int ipc_put_u64(unsigned char **ptr, size_t *left, uint64_t value) {
-    if (!ptr || !*ptr || !left || *left < sizeof(uint64_t)) return 0;
-
-    memcpy(*ptr, &value, sizeof(uint64_t));
-    *ptr += sizeof(uint64_t);
-    *left -= sizeof(uint64_t);
-
-    return 1;
-}
-
-static int ipc_put_bytes(unsigned char **ptr, size_t *left, const void *value, size_t size) {
-    if (!ptr || !*ptr || !left || (!value && size != 0) || size > *left) return 0;
-
-    if (size) memcpy(*ptr, value, size);
-
-    *ptr += size;
-    *left -= size;
-
-    return 1;
-}
-
-static int ipc_get_u32(const unsigned char **ptr, size_t *left, uint32_t *value) {
-    if (!ptr || !*ptr || !left || !value || *left < sizeof(uint32_t)) return 0;
-
-    memcpy(value, *ptr, sizeof(uint32_t));
-    *ptr += sizeof(uint32_t);
-    *left -= sizeof(uint32_t);
-
-    return 1;
-}
-
-static int ipc_get_u64(const unsigned char **ptr, size_t *left, uint64_t *value) {
-    if (!ptr || !*ptr || !left || !value || *left < sizeof(uint64_t)) return 0;
-
-    memcpy(value, *ptr, sizeof(uint64_t));
-    *ptr += sizeof(uint64_t);
-    *left -= sizeof(uint64_t);
-
-    return 1;
-}
-
-static int ipc_get_bytes(const unsigned char **ptr, size_t *left, const unsigned char **value, size_t size) {
-    if (!ptr || !*ptr || !left || !value || size > *left) return 0;
-
-    *value = *ptr;
-    *ptr += size;
-    *left -= size;
-
-    return 1;
-}
-
-static int init_pawd_daemon(void) {
-    pthread_mutexattr_t mutex_attr;
-    pthread_condattr_t cond_attr;
-    char template[] = "/tmp/pawd_XXXXXX";
-    char shm_fd_str[32];
-    int bin_fd;
-    int rc;
-    size_t written = 0;
-    size_t binary_size = sizeof(pawd_bin);
-
-    g_pawd_shm_fd = memfd_create("paw_shm", 0);
-
-    if (g_pawd_shm_fd < 0) {
-        perror("memfd_create");
-        return -1;
-    }
-
-    if (ftruncate(g_pawd_shm_fd, sizeof(SharedIPC)) < 0) {
-        perror("ftruncate");
-        close(g_pawd_shm_fd);
-        g_pawd_shm_fd = -1;
-        return -1;
-    }
-
-    g_pawd_shm = mmap(NULL, sizeof(SharedIPC), PROT_READ | PROT_WRITE, MAP_SHARED, g_pawd_shm_fd, 0);
-
-    if (g_pawd_shm == MAP_FAILED) {
-        perror("mmap");
-        close(g_pawd_shm_fd);
-        g_pawd_shm_fd = -1;
-        g_pawd_shm = NULL;
-        return -1;
-    }
-
-    memset(g_pawd_shm, 0, sizeof(SharedIPC));
-
-    rc = pthread_mutexattr_init(&mutex_attr);
-
-    if (rc != 0) {
-        return -1;
-    }
-
-    rc = pthread_mutexattr_setpshared(&mutex_attr, PTHREAD_PROCESS_SHARED);
-
-    if (rc != 0) {
-        pthread_mutexattr_destroy(&mutex_attr);
-        return -1;
-    }
-
-    rc = pthread_mutex_init(&g_pawd_shm->mutex, &mutex_attr);
-    pthread_mutexattr_destroy(&mutex_attr);
-
-    if (rc != 0) {
-        return -1;
-    }
-
-    rc = pthread_condattr_init(&cond_attr);
-
-    if (rc != 0) {
-        return -1;
-    }
-
-    rc = pthread_condattr_setpshared(&cond_attr, PTHREAD_PROCESS_SHARED);
-
-    if (rc != 0) {
-        pthread_condattr_destroy(&cond_attr);
-        return -1;
-    }
-
-    rc = pthread_cond_init(&g_pawd_shm->cond_host, &cond_attr);
-
-    if (rc != 0) {
-        pthread_condattr_destroy(&cond_attr);
-        return -1;
-    }
-
-    rc = pthread_cond_init(&g_pawd_shm->cond_helper, &cond_attr);
-    pthread_condattr_destroy(&cond_attr);
-
-    if (rc != 0) {
-        return -1;
-    }
-
-    g_pawd_shm->command = CMD_IDLE;
-    g_pawd_shm->status = STATUS_IDLE;
-    g_pawd_shm->data_size = 0;
-
-    bin_fd = mkstemp(template);
-
-    if (bin_fd < 0) {
-        perror("mkstemp");
-        return -1;
-    }
-
-    snprintf(g_pawd_bin_path, sizeof(g_pawd_bin_path), "%s", template);
-
-    while (written < binary_size) {
-        ssize_t n = write(bin_fd, pawd_bin + written, binary_size - written);
-
-        if (n <= 0) {
-            close(bin_fd);
-            unlink(g_pawd_bin_path);
-            g_pawd_bin_path[0] = '\0';
-            return -1;
-        }
-
-        written += (size_t)n;
-    }
-
-    close(bin_fd);
-
-    if (chmod(g_pawd_bin_path, 0755) < 0) {
-        unlink(g_pawd_bin_path);
-        g_pawd_bin_path[0] = '\0';
-        return -1;
-    }
-
-    snprintf(shm_fd_str, sizeof(shm_fd_str), "%d", g_pawd_shm_fd);
-
-    g_pawd_pid = fork();
-
-    if (g_pawd_pid < 0) {
-        unlink(g_pawd_bin_path);
-        g_pawd_bin_path[0] = '\0';
-        return -1;
-    }
-
-    if (g_pawd_pid == 0) {
-        execl(g_pawd_bin_path, "pawd", shm_fd_str, NULL);
-        _exit(127);
-    }
-
-    return 0;
-}
-
-static void stop_pawd_daemon(void) {
-    if (!g_pawd_shm) return;
-
-    pthread_mutex_lock(&g_pawd_shm->mutex);
-
-    g_pawd_shm->status = STATUS_IDLE;
-    g_pawd_shm->data_size = 0;
-    g_pawd_shm->command = CMD_EXIT;
-
-    pthread_cond_signal(&g_pawd_shm->cond_helper);
-
-    while (g_pawd_shm->command != CMD_IDLE) {
-        pthread_cond_wait(&g_pawd_shm->cond_host, &g_pawd_shm->mutex);
-    }
-
-    pthread_mutex_unlock(&g_pawd_shm->mutex);
-
-    if (g_pawd_pid > 0) waitpid(g_pawd_pid, NULL, 0);
-
-    munmap(g_pawd_shm, sizeof(SharedIPC));
-    close(g_pawd_shm_fd);
-
-    g_pawd_shm = NULL;
-    g_pawd_shm_fd = -1;
-    g_pawd_pid = -1;
-}
-
-#endif
 
 static const char *ffi_type_name(paw_ffi_type_t type) {
     switch (type) {
@@ -332,10 +88,7 @@ static int is_paw_library_name(const char *path) {
     if (path[1] == '\0') return 0;
 
     for (const char *p = path + 1; *p; ++p) {
-        if (!((*p >= 'a' && *p <= 'z') ||
-              (*p >= 'A' && *p <= 'Z') ||
-              (*p >= '0' && *p <= '9') ||
-              *p == '_' || *p == '-')) return 0;
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_' || *p == '-')) return 0;
     }
 
     return 1;
@@ -378,212 +131,6 @@ static char *resolve_library_path(const char *requested) {
     return NULL;
 }
 
-#ifdef PAW_STATIC
-
-static paw_loaded_library_t *load_paw_library(const char *requested) {
-    char *resolved = NULL;
-    unsigned char *ptr;
-    size_t left;
-    uint32_t fn_count;
-    paw_loaded_library_t *lib;
-    paw_library_t *info = NULL;
-    paw_ffi_function_t *funcs = NULL;
-
-    if (!requested) return NULL;
-
-    for (size_t i = 0; i < g_library_count; ++i) {
-        if (g_libraries[i].requested_name &&
-            strcmp(g_libraries[i].requested_name, requested) == 0) {
-            return &g_libraries[i];
-        }
-    }
-
-    if (g_library_count >= MAX_PAW_LIBRARIES) {
-        fprintf(stderr, _("FFI error: maximum number of loaded modules (%d) reached\n"), MAX_PAW_LIBRARIES);
-        return NULL;
-    }
-
-    resolved = resolve_library_path(requested);
-
-    if (!resolved) {
-        if (is_paw_library_name(requested)) {
-            fprintf(stderr, _("FFI error: module '%s' was not found in the Paw module search paths\n"), requested);
-        } else {
-            fprintf(stderr, _("FFI error: module '%s' was not found\n"), requested);
-        }
-
-        return NULL;
-    }
-
-    if (strlen(resolved) + 1 > SHM_DATA_SIZE - sizeof(uint32_t)) {
-        fprintf(stderr, _("FFI error: module path is too long\n"));
-        free(resolved);
-        return NULL;
-    }
-
-    pthread_mutex_lock(&g_pawd_shm->mutex);
-
-    g_pawd_shm->command = CMD_LOAD_PLUGIN;
-    g_pawd_shm->status = STATUS_IDLE;
-    g_pawd_shm->data_size = 0;
-    g_pawd_shm->error_buf[0] = '\0';
-
-    ptr = g_pawd_shm->data;
-    left = sizeof(g_pawd_shm->data);
-
-    {
-        uint32_t path_len = (uint32_t)strlen(resolved) + 1;
-
-        if (!ipc_put_u32(&ptr, &left, path_len) ||
-            !ipc_put_bytes(&ptr, &left, resolved, path_len)) {
-            pthread_mutex_unlock(&g_pawd_shm->mutex);
-            free(resolved);
-            return NULL;
-        }
-
-        g_pawd_shm->data_size = (uint32_t)(sizeof(g_pawd_shm->data) - left);
-    }
-
-    pthread_cond_signal(&g_pawd_shm->cond_helper);
-
-    while (g_pawd_shm->command != CMD_IDLE) {
-        pthread_cond_wait(&g_pawd_shm->cond_host, &g_pawd_shm->mutex);
-    }
-
-    if (g_pawd_shm->status != STATUS_SUCCESS) {
-        fprintf(stderr, _("FFI error: failed to load module '%s': %s\n"), resolved, g_pawd_shm->error_buf);
-        pthread_mutex_unlock(&g_pawd_shm->mutex);
-        free(resolved);
-        return NULL;
-    }
-
-    ptr = g_pawd_shm->data;
-    left = g_pawd_shm->data_size;
-
-    if (!ipc_get_u32((const unsigned char **)&ptr, &left, &fn_count)) {
-        pthread_mutex_unlock(&g_pawd_shm->mutex);
-        free(resolved);
-        return NULL;
-    }
-
-    if (fn_count > MAX_PAW_FUNCTIONS) {
-        fprintf(stderr, _("FFI error: module '%s' exports too many functions\n"), resolved);
-        pthread_mutex_unlock(&g_pawd_shm->mutex);
-        free(resolved);
-        return NULL;
-    }
-
-    funcs = calloc(fn_count ? fn_count : 1, sizeof(*funcs));
-    info = calloc(1, sizeof(*info));
-
-    if (!funcs || !info) {
-        free(funcs);
-        free(info);
-        pthread_mutex_unlock(&g_pawd_shm->mutex);
-        free(resolved);
-        return NULL;
-    }
-
-    for (uint32_t i = 0; i < fn_count; ++i) {
-        uint32_t name_len;
-        uint32_t return_type;
-        uint32_t arg_count;
-        uint32_t variadic;
-        const unsigned char *name_bytes;
-
-        if (!ipc_get_u32((const unsigned char **)&ptr, &left, &name_len) ||
-            name_len == 0 ||
-            name_len > left) {
-            goto metadata_error;
-        }
-
-        if (!ipc_get_bytes((const unsigned char **)&ptr, &left, &name_bytes, name_len)) {
-            goto metadata_error;
-        }
-
-        if (name_bytes[name_len - 1] != '\0') goto metadata_error;
-
-        funcs[i].name = malloc(name_len);
-
-        if (!funcs[i].name) goto metadata_error;
-
-        memcpy((char *)funcs[i].name, name_bytes, name_len);
-
-        if (!ipc_get_u32((const unsigned char **)&ptr, &left, &return_type) ||
-            !ipc_get_u32((const unsigned char **)&ptr, &left, &arg_count)) {
-            goto metadata_error;
-        }
-
-        if (arg_count > PAW_IPC_MAX_ARGS) goto metadata_error;
-
-        funcs[i].return_type = return_type;
-        funcs[i].arg_count = arg_count;
-        funcs[i].address = (void *)(uintptr_t)(i + 1);
-
-        for (uint32_t a = 0; a < arg_count; ++a) {
-            uint32_t arg_type;
-
-            if (!ipc_get_u32((const unsigned char **)&ptr, &left, &arg_type)) goto metadata_error;
-
-            funcs[i].args[a] = arg_type;
-        }
-
-        if (!ipc_get_u32((const unsigned char **)&ptr, &left, &variadic)) goto metadata_error;
-
-        funcs[i].variadic = variadic ? 1 : 0;
-    }
-
-    info->abi_version = PAW_FFI_ABI_VERSION;
-    info->name = strdup(requested);
-    info->function_count = fn_count;
-    info->functions = funcs;
-
-    if (!info->name) goto metadata_error;
-
-    lib = &g_libraries[g_library_count];
-
-    memset(lib, 0, sizeof(*lib));
-
-    lib->requested_name = strdup(requested);
-    lib->resolved_path = resolved;
-    lib->handle = NULL;
-    lib->info = info;
-    lib->cloned_functions = funcs;
-
-    if (!lib->requested_name) {
-        free((void *)info->name);
-        free(info);
-        free(funcs);
-        pthread_mutex_unlock(&g_pawd_shm->mutex);
-        free(resolved);
-        return NULL;
-    }
-
-    g_library_count++;
-
-    pthread_mutex_unlock(&g_pawd_shm->mutex);
-
-    return lib;
-
-metadata_error:
-    if (funcs) {
-        for (uint32_t i = 0; i < fn_count; ++i) {
-            free((void *)funcs[i].name);
-        }
-    }
-
-    free(funcs);
-    free(info);
-
-    pthread_mutex_unlock(&g_pawd_shm->mutex);
-    free(resolved);
-
-    fprintf(stderr, _("FFI error: malformed metadata returned by module\n"));
-    return NULL;
-}
-
-#else
-
 static paw_loaded_library_t *load_paw_library(const char *requested) {
     if (!requested) return NULL;
 
@@ -608,7 +155,11 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
         return NULL;
     }
 
+#ifdef PAW_STATIC
+    void *handle = dlopen(resolved, RTLD_NOW | RTLD_LOCAL);
+#else
     DLLib *handle = dlLoadLibrary(resolved);
+#endif
 
     if (!handle) {
         fprintf(stderr, _("FFI error: failed to load module '%s'\n"), resolved);
@@ -616,11 +167,19 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
         return NULL;
     }
 
+#ifdef PAW_STATIC
+    void *info_symbol = dlsym(handle, "paw_library_info");
+#else
     void *info_symbol = dlFindSymbol(handle, "paw_library_info");
+#endif
 
     if (!info_symbol) {
         fprintf(stderr, _("FFI error: module '%s' does not export paw_library_info\n"), resolved);
+#ifdef PAW_STATIC
+        dlclose(handle);
+#else
         dlFreeLibrary(handle);
+#endif
         free(resolved);
         return NULL;
     }
@@ -630,21 +189,35 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
 
     if (!info) {
         fprintf(stderr, _("FFI error: module '%s' returned NULL metadata\n"), resolved);
+#ifdef PAW_STATIC
+        dlclose(handle);
+#else
         dlFreeLibrary(handle);
+#endif
         free(resolved);
         return NULL;
     }
 
     if (info->abi_version != PAW_FFI_ABI_VERSION) {
         fprintf(stderr, _("FFI error: module '%s' has incompatible Paw FFI ABI\n"), resolved);
+        fprintf(stderr, "  module ABI: %u\n", info->abi_version);
+        fprintf(stderr, "  runtime ABI: %u\n", PAW_FFI_ABI_VERSION);
+#ifdef PAW_STATIC
+        dlclose(handle);
+#else
         dlFreeLibrary(handle);
+#endif
         free(resolved);
         return NULL;
     }
 
     if (!info->functions && info->function_count != 0) {
         fprintf(stderr, _("FFI error: module '%s' has a NULL function table\n"), resolved);
+#ifdef PAW_STATIC
+        dlclose(handle);
+#else
         dlFreeLibrary(handle);
+#endif
         free(resolved);
         return NULL;
     }
@@ -652,21 +225,58 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
     for (uint32_t i = 0; i < info->function_count; ++i) {
         const paw_ffi_function_t *fn = &info->functions[i];
 
-        if (!fn->name || !*fn->name || !fn->address) {
+        if (!fn->name || !*fn->name) {
+            fprintf(stderr, _("FFI error: module '%s' contains a function with no name\n"), resolved);
+#ifdef PAW_STATIC
+            dlclose(handle);
+#else
             dlFreeLibrary(handle);
+#endif
             free(resolved);
             return NULL;
         }
 
-        if (fn->arg_count > 15 || !ffi_type_valid((paw_ffi_type_t)fn->return_type)) {
+        if (!fn->address) {
+            fprintf(stderr, _("FFI error: module '%s' function '%s' has a NULL address\n"), resolved, fn->name);
+#ifdef PAW_STATIC
+            dlclose(handle);
+#else
             dlFreeLibrary(handle);
+#endif
+            free(resolved);
+            return NULL;
+        }
+
+        if (fn->arg_count > 15) {
+            fprintf(stderr, _("FFI error: module '%s' function '%s' has %u arguments; Paw supports at most 15\n"), resolved, fn->name, fn->arg_count);
+#ifdef PAW_STATIC
+            dlclose(handle);
+#else
+            dlFreeLibrary(handle);
+#endif
+            free(resolved);
+            return NULL;
+        }
+
+        if (!ffi_type_valid((paw_ffi_type_t)fn->return_type)) {
+            fprintf(stderr, _("FFI error: module '%s' function '%s' has invalid return type %u\n"), resolved, fn->name, fn->return_type);
+#ifdef PAW_STATIC
+            dlclose(handle);
+#else
+            dlFreeLibrary(handle);
+#endif
             free(resolved);
             return NULL;
         }
 
         for (uint32_t a = 0; a < fn->arg_count; ++a) {
             if (!ffi_type_valid((paw_ffi_type_t)fn->args[a]) || fn->args[a] == PAW_FFI_VOID) {
+                fprintf(stderr, _("FFI error: module '%s' function '%s' has invalid argument type %u at argument %u\n"), resolved, fn->name, fn->args[a], a + 1);
+#ifdef PAW_STATIC
+                dlclose(handle);
+#else
                 dlFreeLibrary(handle);
+#endif
                 free(resolved);
                 return NULL;
             }
@@ -675,15 +285,17 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
 
     paw_loaded_library_t *lib = &g_libraries[g_library_count++];
 
-    memset(lib, 0, sizeof(*lib));
-
     lib->requested_name = strdup(requested);
     lib->resolved_path = resolved;
     lib->handle = handle;
     lib->info = info;
 
     if (!lib->requested_name) {
+#ifdef PAW_STATIC
+        dlclose(handle);
+#else
         dlFreeLibrary(handle);
+#endif
         free(lib->resolved_path);
         g_library_count--;
         return NULL;
@@ -691,8 +303,6 @@ static paw_loaded_library_t *load_paw_library(const char *requested) {
 
     return lib;
 }
-
-#endif
 
 static const paw_ffi_function_t *find_function(paw_loaded_library_t *library, const char *name) {
     if (!library || !library->info || !name) return NULL;
@@ -708,9 +318,7 @@ static const paw_ffi_function_t *find_function(paw_loaded_library_t *library, co
 
 static uint32_t register_runtime_function(paw_loaded_library_t *library, const paw_ffi_function_t *function) {
     for (size_t i = 0; i < g_function_count; ++i) {
-        if (g_functions[i].library == library && g_functions[i].function == function) {
-            return (uint32_t)(i + 1);
-        }
+        if (g_functions[i].library == library && g_functions[i].function == function) return (uint32_t)(i + 1);
     }
 
     if (g_function_count >= MAX_PAW_FUNCTIONS) return 0;
@@ -752,167 +360,18 @@ static void ffi_push_argument(VM *vm, paw_ffi_type_t type, uintptr_t value) {
             dcArgPointer(g_vm_ffi, (DCpointer)value);
             break;
 
+        case PAW_FFI_VOID:
         default:
             break;
     }
 }
 
-static uintptr_t ffi_call(VM *vm, paw_runtime_function_t *runtime_fn) {
-    const paw_ffi_function_t *fn;
-
-    if (!runtime_fn || !runtime_fn->function) return 0;
-
-    fn = runtime_fn->function;
+static uintptr_t ffi_call(VM *vm, const paw_ffi_function_t *fn) {
+    if (!fn || !fn->address) return 0;
 
     g_last_ffi_type = (paw_ffi_type_t)fn->return_type;
     g_last_ffi_value = 0;
     g_last_ffi_valid = 0;
-
-#ifdef PAW_STATIC
-
-    {
-        unsigned char *ptr;
-        size_t left;
-        uint32_t path_len;
-        uint32_t name_len;
-        uint32_t arg_count;
-
-        pthread_mutex_lock(&g_pawd_shm->mutex);
-
-        g_pawd_shm->command = CMD_EXEC_FUNC;
-        g_pawd_shm->status = STATUS_IDLE;
-        g_pawd_shm->data_size = 0;
-        g_pawd_shm->error_buf[0] = '\0';
-
-        ptr = g_pawd_shm->data;
-        left = sizeof(g_pawd_shm->data);
-
-        path_len = (uint32_t)strlen(runtime_fn->library->resolved_path) + 1;
-        name_len = (uint32_t)strlen(fn->name) + 1;
-        arg_count = fn->arg_count;
-
-        if (!ipc_put_u32(&ptr, &left, path_len) ||
-            !ipc_put_bytes(&ptr, &left, runtime_fn->library->resolved_path, path_len) ||
-            !ipc_put_u32(&ptr, &left, name_len) ||
-            !ipc_put_bytes(&ptr, &left, fn->name, name_len) ||
-            !ipc_put_u32(&ptr, &left, arg_count)) {
-            pthread_mutex_unlock(&g_pawd_shm->mutex);
-            return 0;
-        }
-
-        for (uint32_t i = 0; i < fn->arg_count; ++i) {
-            paw_ffi_type_t type = (paw_ffi_type_t)fn->args[i];
-
-            if (!ipc_put_u32(&ptr, &left, type)) {
-                pthread_mutex_unlock(&g_pawd_shm->mutex);
-                return 0;
-            }
-
-            if (type == PAW_FFI_CSTRING) {
-                const char *str = VM_get_string(vm, (u32)vm->regs[i + 1]);
-                uint32_t string_len = str ? (uint32_t)(strlen(str) + 1) : 0;
-
-                if (!ipc_put_u32(&ptr, &left, string_len)) {
-                    pthread_mutex_unlock(&g_pawd_shm->mutex);
-                    return 0;
-                }
-
-                if (string_len &&
-                    !ipc_put_bytes(&ptr, &left, str, string_len)) {
-                    pthread_mutex_unlock(&g_pawd_shm->mutex);
-                    return 0;
-                }
-            } else {
-                uint64_t value = vm->regs[i + 1];
-
-                if (!ipc_put_u64(&ptr, &left, value)) {
-                    pthread_mutex_unlock(&g_pawd_shm->mutex);
-                    return 0;
-                }
-            }
-        }
-
-        g_pawd_shm->data_size = (uint32_t)(sizeof(g_pawd_shm->data) - left);
-
-        pthread_cond_signal(&g_pawd_shm->cond_helper);
-
-        while (g_pawd_shm->command != CMD_IDLE) {
-            pthread_cond_wait(&g_pawd_shm->cond_host, &g_pawd_shm->mutex);
-        }
-
-        if (g_pawd_shm->status != STATUS_SUCCESS) {
-            fprintf(stderr, _("FFI error in remote execution of '%s': %s\n"), fn->name, g_pawd_shm->error_buf);
-            pthread_mutex_unlock(&g_pawd_shm->mutex);
-            return 0;
-        }
-
-        ptr = g_pawd_shm->data;
-        left = g_pawd_shm->data_size;
-
-        if (fn->return_type == PAW_FFI_CSTRING) {
-            uint32_t string_len;
-            const unsigned char *string_bytes;
-            char *copy;
-            int id;
-
-            if (!ipc_get_u32((const unsigned char **)&ptr, &left, &string_len)) {
-                pthread_mutex_unlock(&g_pawd_shm->mutex);
-                return 0;
-            }
-
-            if (string_len == 0) {
-                pthread_mutex_unlock(&g_pawd_shm->mutex);
-                g_last_ffi_value = 0;
-                g_last_ffi_valid = 1;
-                return 0;
-            }
-
-            if (!ipc_get_bytes((const unsigned char **)&ptr, &left, &string_bytes, string_len) ||
-                string_bytes[string_len - 1] != '\0') {
-                pthread_mutex_unlock(&g_pawd_shm->mutex);
-                return 0;
-            }
-
-            copy = malloc(string_len);
-
-            if (!copy) {
-                pthread_mutex_unlock(&g_pawd_shm->mutex);
-                return 0;
-            }
-
-            memcpy(copy, string_bytes, string_len);
-
-            pthread_mutex_unlock(&g_pawd_shm->mutex);
-
-            id = VM_register_str(vm, copy);
-            free(copy);
-
-            if (id < 0) return 0;
-
-            g_last_ffi_value = (uintptr_t)id;
-            g_last_ffi_valid = 1;
-
-            return (uintptr_t)id;
-        }
-
-        {
-            uint64_t result;
-
-            if (!ipc_get_u64((const unsigned char **)&ptr, &left, &result)) {
-                pthread_mutex_unlock(&g_pawd_shm->mutex);
-                return 0;
-            }
-
-            pthread_mutex_unlock(&g_pawd_shm->mutex);
-
-            g_last_ffi_value = (uintptr_t)result;
-            g_last_ffi_valid = 1;
-
-            return (uintptr_t)result;
-        }
-    }
-
-#else
 
     dcReset(g_vm_ffi);
 
@@ -974,8 +433,6 @@ static uintptr_t ffi_call(VM *vm, paw_runtime_function_t *runtime_fn) {
     g_last_ffi_valid = 1;
 
     return result;
-
-#endif
 }
 
 static int unpack_ffi_types(VM *vm, uint32_t *argc, uint64_t *types) {
@@ -1001,20 +458,15 @@ static void ffi_error_call(paw_runtime_function_t *runtime_fn, const char *messa
         return;
     }
 
-    fprintf(stderr, _("FFI error: %s.%s()\n"),
-        runtime_fn->library->info && runtime_fn->library->info->name
-            ? runtime_fn->library->info->name
-            : runtime_fn->library->requested_name,
-        runtime_fn->function->name ? runtime_fn->function->name : "?");
-
+    fprintf(stderr, _("FFI error: %s.%s()\n"), runtime_fn->library->info && runtime_fn->library->info->name ? runtime_fn->library->info->name : runtime_fn->library->requested_name, runtime_fn->function->name ? runtime_fn->function->name : "?");
     fprintf(stderr, "  %s\n", message);
 }
 
 static int ffi_check_types(VM *vm, paw_runtime_function_t *runtime_fn) {
+    if (!vm || !runtime_fn || !runtime_fn->function) return 0;
+
     uint32_t argc = 0;
     uint64_t packed = 0;
-
-    if (!vm || !runtime_fn || !runtime_fn->function) return 0;
 
     if (!unpack_ffi_types(vm, &argc, &packed)) {
         fprintf(stderr, _("FFI error: malformed type-check frame\n"));
@@ -1025,10 +477,8 @@ static int ffi_check_types(VM *vm, paw_runtime_function_t *runtime_fn) {
 
     if (argc != fn->arg_count) {
         char message[128];
-
         snprintf(message, sizeof(message), "expected %u arguments, got %u", fn->arg_count, argc);
         ffi_error_call(runtime_fn, message);
-
         return 0;
     }
 
@@ -1040,12 +490,7 @@ static int ffi_check_types(VM *vm, paw_runtime_function_t *runtime_fn) {
 
         if (actual != expected) {
             char message[192];
-
-            snprintf(message, sizeof(message), "argument %u: expected %s, got %s",
-                i + 1,
-                ffi_type_name(expected),
-                ffi_type_name(actual));
-
+            snprintf(message, sizeof(message), "argument %u: expected %s, got %s", i + 1, ffi_type_name(expected), ffi_type_name(actual));
             ffi_error_call(runtime_fn, message);
             return 0;
         }
@@ -1053,7 +498,6 @@ static int ffi_check_types(VM *vm, paw_runtime_function_t *runtime_fn) {
 
     return 1;
 }
-
 #endif
 
 static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
@@ -1160,7 +604,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
                 break;
             }
 
-            vm->regs[0] = (u32)ffi_call(vm, runtime_fn);
+            vm->regs[0] = (u32)ffi_call(vm, runtime_fn->function);
             break;
         }
 
@@ -1186,7 +630,7 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
                 }
 
                 case PAW_FFI_POINTER:
-                    printf("0x%llX\n", (unsigned long long)g_last_ffi_value);
+                    printf("0x%08X\n", (u32)g_last_ffi_value);
                     break;
 
                 default:
@@ -1196,16 +640,13 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
 
             break;
         }
-
 #else
-
         case PAW_SYS_FFI_CHECK:
         case PAW_SYS_FFI_CALL:
         case PAW_SYS_FFI_PRINT:
         case PAW_SYS_FFI_LOOKUP:
             fprintf(stderr, _("FFI: Unavailable in WASI Mode\n"));
             break;
-
 #endif
 
         default:
@@ -1216,46 +657,27 @@ static void custom_syscalls(VM *vm, Memory *mem, u32 sys_code) {
 }
 
 #ifndef WASI
-
 static void cleanup_paw_libraries(void) {
     for (size_t i = 0; i < g_library_count; ++i) {
-#ifdef PAW_STATIC
-        if (g_libraries[i].cloned_functions) {
-            uint32_t count = g_libraries[i].info
-                ? g_libraries[i].info->function_count
-                : 0;
-
-            for (uint32_t j = 0; j < count; ++j) {
-                free((void *)g_libraries[i].cloned_functions[j].name);
-            }
-
-            free(g_libraries[i].cloned_functions);
-        }
-
-        if (g_libraries[i].info) {
-            free((void *)g_libraries[i].info->name);
-            free((void *)g_libraries[i].info);
-        }
-#else
         if (g_libraries[i].handle) {
+#ifdef PAW_STATIC
+            dlclose(g_libraries[i].handle);
+#else
             dlFreeLibrary(g_libraries[i].handle);
-        }
 #endif
+        }
 
         free(g_libraries[i].requested_name);
         free(g_libraries[i].resolved_path);
-
-        memset(&g_libraries[i], 0, sizeof(g_libraries[i]));
     }
 
     g_library_count = 0;
     g_function_count = 0;
 }
-
 #endif
 
 int main(int argc, char **argv) {
-    g_mm = nu_mm_create(NU_MM_ARENA, backing, sizeof(backing));
+    g_mm = nu_mm_create(NU_MM_SLOB, backing, sizeof(backing));
 
     if (!g_mm) {
         glog_log(NULL, 0, 0, GLOG_FATAL, _("Fatal: Failed to allocate memory arena!"));
@@ -1264,7 +686,6 @@ int main(int argc, char **argv) {
 
     LsonTranslator lson;
     lson_init(&lson, g_mm);
-
     g_translator = &lson;
 
     glog_init();
@@ -1272,6 +693,7 @@ int main(int argc, char **argv) {
 
     if (argc < 2) {
         glog_log(NULL, 0, 0, GLOG_INFO, _("Usage: %s <bytecode.pawv>\n"), get_basename(argv[0]));
+        nu_mm_destroy(g_mm);
         return EXIT_FAILURE;
     }
 
@@ -1293,6 +715,7 @@ int main(int argc, char **argv) {
 
         if (!f) {
             printf(_("Failed to open file for disassembly: %s\n"), argv[2]);
+            nu_mm_destroy(g_mm);
             return -1;
         }
 
@@ -1302,17 +725,17 @@ int main(int argc, char **argv) {
             printf("Disassembled %s (size: %ld)\n", argv[2], prog_len);
             VM_disassemble_stream(mem->rom, prog_len, stdout);
             fclose(f);
+            nu_mm_destroy(g_mm);
             return 0;
         }
 
         printf("Failed to parse binary stream: %s\n", argv[2]);
         fclose(f);
+        nu_mm_destroy(g_mm);
         return -1;
     }
 
 #ifndef WASI
-
-#ifndef PAW_STATIC
     g_vm_ffi = dcNewCallVM(4096);
 
     if (!g_vm_ffi) {
@@ -1322,17 +745,6 @@ int main(int argc, char **argv) {
     }
 
     dcMode(g_vm_ffi, DC_CALL_C_DEFAULT);
-
-#else
-
-    if (init_pawd_daemon() != 0) {
-        glog_log(NULL, 0, 0, GLOG_FATAL, _("Fatal: Failed to start pawd daemon!"));
-        nu_mm_destroy(g_mm);
-        return EXIT_FAILURE;
-    }
-
-#endif
-
 #endif
 
     current_filename = argv[1];
@@ -1342,19 +754,10 @@ int main(int argc, char **argv) {
 
     if (ret != 0) {
         glog_log(NULL, 0, 0, GLOG_FATAL, _("Couldn't run bytecode file: %s, errcode: %d"), current_filename, ret);
-
 #ifndef WASI
-
         cleanup_paw_libraries();
-
-#ifdef PAW_STATIC
-        stop_pawd_daemon();
-#else
-        if (g_vm_ffi) dcFree(g_vm_ffi);
+        dcFree(g_vm_ffi);
 #endif
-
-#endif
-
         nu_mm_destroy(g_mm);
         return EXIT_FAILURE;
     }
@@ -1362,18 +765,11 @@ int main(int argc, char **argv) {
     VM_clear_strings(vm);
 
 #ifndef WASI
-
     cleanup_paw_libraries();
 
-#ifdef PAW_STATIC
-    stop_pawd_daemon();
-#else
     if (g_vm_ffi) dcFree(g_vm_ffi);
 #endif
 
-#endif
-
     nu_mm_destroy(g_mm);
-
     return ret;
 }

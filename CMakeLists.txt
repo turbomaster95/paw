@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.11)
+
 set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
 set(PAW_STATIC "" CACHE STRING "Enable Static Linking (yes|no)")
 set(NEED_DBG "no" CACHE STRING "Enable Debug symbols (yes|no)")
@@ -14,7 +15,6 @@ if(CCACHE_PROGRAM)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
-
 
 if("${PAW_TARGET}" STREQUAL "wasi")
     set(CMAKE_SYSTEM_NAME Generic CACHE STRING "" FORCE)
@@ -49,34 +49,53 @@ include_directories(
 
 if(NOT "${PAW_TARGET}" STREQUAL "wasi")
     include(FetchContent)
+
     set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
     FetchContent_Declare(
         dyncall
         URL https://dyncall.org/r1.4/dyncall-1.4.tar.gz
-	DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
+
     FetchContent_MakeAvailable(dyncall)
 
     include_directories(
         ${dyncall_SOURCE_DIR}/dyncall
         ${dyncall_SOURCE_DIR}/dynload
     )
-endif()
 
+    if("${PAW_STATIC}" STREQUAL "yes")
+        enable_language(CXX)
 
-if("${PAW_STATIC}" STREQUAL "yes")
-    add_executable(pawd src/pawv/pawd/main.c)
-    target_link_libraries(pawd PRIVATE dl pthread dyncall_s dynload_s)
+        FetchContent_Declare(
+            solo
+            GIT_REPOSITORY https://github.com/pg83/solo.git
+            GIT_TAG main
+            GIT_SHALLOW TRUE
+        )
 
-    find_program(XXD_EXECUTABLE xxd REQUIRED)
+        FetchContent_Populate(solo)
 
-    add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/pawd_emb.h
-	DEPENDS pawd
-	COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/src/pawv/pawd/bin2c.py ${CMAKE_CURRENT_BINARY_DIR}/pawd pawd_bin > ${CMAKE_CURRENT_BINARY_DIR}/pawd_emb.h
-	WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-	COMMENT "Embedding pawd binary into pawd_emb.h"
-   )
+        set(SOLO_SOURCE_DIR "${solo_SOURCE_DIR}")
+        set(SOLO_DYNCN_ARCHIVE "${SOLO_SOURCE_DIR}/dlfcn")
+
+        add_custom_command(
+            OUTPUT ${SOLO_DYNCN_ARCHIVE}
+            COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${SOLO_SOURCE_DIR}/build
+            WORKING_DIRECTORY ${SOLO_SOURCE_DIR}
+            VERBATIM
+            COMMENT "Building SoLo dlfcn"
+        )
+
+        add_custom_target(solo_build DEPENDS ${SOLO_DYNCN_ARCHIVE})
+
+        add_library(solo_dlfcn STATIC IMPORTED GLOBAL)
+
+        set_target_properties(solo_dlfcn PROPERTIES IMPORTED_LOCATION "${SOLO_DYNCN_ARCHIVE}" INTERFACE_INCLUDE_DIRECTORIES "${SOLO_SOURCE_DIR}/lib")
+
+        add_dependencies(solo_dlfcn solo_build)
+    endif()
 endif()
 
 if("${PAW_STATIC}" STREQUAL "yes")
@@ -96,6 +115,7 @@ endif()
 add_subdirectory(lib/nu)
 
 find_package(FLEX REQUIRED)
+
 flex_target(Dogmatic src/dogma/lex.l ${CMAKE_CURRENT_BINARY_DIR}/dogma/lex.yy.c)
 
 file(GLOB DOGMA_SRCS "src/dogma/*.c")
@@ -107,44 +127,42 @@ add_library(dogma_s STATIC ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
 set_target_properties(dogma_s PROPERTIES OUTPUT_NAME dogma)
 target_link_libraries(dogma_s PRIVATE nu_static)
 
-
 if(NOT "${PAW_TARGET}" STREQUAL "wasi")
     add_library(dogma_d SHARED ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
     set_target_properties(dogma_d PROPERTIES OUTPUT_NAME dogma)
 endif()
 
 if(NOT DOGMAONLY)
-	file(GLOB PAWC_SRCS "src/pawc/*.c")
+    file(GLOB PAWC_SRCS "src/pawc/*.c")
 
-	add_compile_options(-I${CMAKE_CURRENT_SOURCE_DIR}/src/common)
+    add_compile_options(-I${CMAKE_CURRENT_SOURCE_DIR}/src/common)
 
-	if("${PAW_TARGET}" STREQUAL "wasi")
-		add_executable(pawc.wasm ${PAWC_SRCS})
-		target_link_libraries(pawc.wasm PRIVATE nu_static dogma_s)
-	endif()
+    if("${PAW_TARGET}" STREQUAL "wasi")
+        add_executable(pawc.wasm ${PAWC_SRCS})
+        target_link_libraries(pawc.wasm PRIVATE nu_static dogma_s)
+    endif()
 
-	if(NOT "${PAW_TARGET}" STREQUAL "wasi")
-		add_executable(pawc ${PAWC_SRCS})
-		target_link_libraries(pawc PRIVATE nu_static dogma_s)
-	endif()
+    if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+        add_executable(pawc ${PAWC_SRCS})
+        target_link_libraries(pawc PRIVATE nu_static dogma_s)
+    endif()
 
-	file(GLOB PAWV_SRCS "src/pawv/*.c")
+    file(GLOB PAWV_SRCS "src/pawv/*.c")
 
-	if("${PAW_STATIC}" STREQUAL "yes")
-		list(APPEND PAWV_SRCS "${CMAKE_CURRENT_BINARY_DIR}/pawd_emb.h")
-	endif()
+    if("${PAW_TARGET}" STREQUAL "wasi")
+        add_executable(pawv.wasm ${PAWV_SRCS})
+        target_link_libraries(pawv.wasm PRIVATE nu_static dogma_s)
+    endif()
 
-	if("${PAW_TARGET}" STREQUAL "wasi")
-		add_executable(pawv.wasm ${PAWV_SRCS})
-	endif()
+    if(NOT "${PAW_TARGET}" STREQUAL "wasi")
+        add_executable(pawv ${PAWV_SRCS})
 
-	if(NOT "${PAW_TARGET}" STREQUAL "wasi")
-		add_executable(pawv ${PAWV_SRCS})
-	endif()
-
-	if(NOT "${PAW_TARGET}" STREQUAL "wasi")
-	    target_link_libraries(pawv PRIVATE nu_static dyncall_s dynload_s dogma_s)
-	else()
-	    target_link_libraries(pawv.wasm PRIVATE nu_static dogma_s)
-	endif()
+        if("${PAW_STATIC}" STREQUAL "yes")
+            target_include_directories(pawv BEFORE PRIVATE ${SOLO_SOURCE_DIR}/lib)
+            target_link_libraries(pawv PRIVATE nu_static dyncall_s dogma_s solo_dlfcn)
+            set_target_properties(pawv PROPERTIES LINKER_LANGUAGE CXX)
+        else()
+            target_link_libraries(pawv PRIVATE nu_static dyncall_s dogma_s ${CMAKE_DL_LIBS})
+        endif()
+    endif()
 endif()
