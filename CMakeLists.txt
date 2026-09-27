@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.11)
 set(PAW_TARGET "native" CACHE STRING "Target architecture (native|wasi)")
+set(PAW_STATIC "" CACHE STRING "Enable Static Linking (yes|no)")
 set(NEED_DBG "no" CACHE STRING "Enable Debug symbols (yes|no)")
 set(NEED_ASAN "" CACHE STRING "Enable ASAN (yes|no)")
 
@@ -29,6 +30,11 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wno-unused)
+
+if("${PAW_STATIC}" STREQUAL "yes")
+    add_compile_options(-static)
+    add_link_options(-static)
+endif()
 
 if("${PAW_TARGET}" STREQUAL "wasi")
     add_compile_options(-w)
