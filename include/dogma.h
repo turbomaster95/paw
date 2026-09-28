@@ -14,4 +14,11 @@ typedef enum {
 dogma_status_t dogma_parse(const char* output_file);
 void dogma_ast2file(nu_ast_node_t *node, const char *out_filename);
 
+char* dogma_get_gcc(void);
+char* dogma_get_compile_date(void);
+char* dogma_get_codename(void);
+char* dogma_get_fullver(void);
+char* dogma_get_branch(void);
+char* dogma_get_platform(void);
+
 #endif

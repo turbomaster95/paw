@@ -75,32 +75,33 @@ if(NOT "${PAW_TARGET}" STREQUAL "wasi")
             GIT_SHALLOW TRUE
         )
 
-        FetchContent_Populate(solo)
+        FetchContent_MakeAvailable(solo)
 
-        set(SOLO_SOURCE_DIR "${solo_SOURCE_DIR}")
-        set(SOLO_DYNCN_ARCHIVE "${SOLO_SOURCE_DIR}/dlfcn")
-
-        add_custom_command(
-            OUTPUT ${SOLO_DYNCN_ARCHIVE}
-            COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${SOLO_SOURCE_DIR}/build
-            WORKING_DIRECTORY ${SOLO_SOURCE_DIR}
-            VERBATIM
-            COMMENT "Building SoLo dlfcn"
+        # Instead of running solo's broken shell script, we compile its dlfcn sources directly:
+        file(GLOB SOLO_DLFCN_SRCS 
+            "${solo_SOURCE_DIR}/lib/*.cpp"
         )
 
-        add_custom_target(solo_build DEPENDS ${SOLO_DYNCN_ARCHIVE})
+        add_library(solo_dlfcn STATIC ${SOLO_DLFCN_SRCS})
+        
+        target_include_directories(solo_dlfcn PUBLIC
+            "${solo_SOURCE_DIR}"
+            "${solo_SOURCE_DIR}/lib"
+        )
+        
+        target_compile_definitions(solo_dlfcn PRIVATE
+            COMPILE_DLOPEN
+            _GNU_SOURCE
+        )
+        target_compile_options(solo_dlfcn PRIVATE
+            -Wall -Wextra -O2 -g -std=c++20
+            -fpermissive
+            -Wno-error=narrowing
+            -Wno-error=invalid-constexpr
+            -Wno-error
+        )
 
-        add_library(solo_dlfcn STATIC IMPORTED GLOBAL)
-
-        set_target_properties(solo_dlfcn PROPERTIES IMPORTED_LOCATION "${SOLO_DYNCN_ARCHIVE}" INTERFACE_INCLUDE_DIRECTORIES "${SOLO_SOURCE_DIR}/lib")
-
-        add_dependencies(solo_dlfcn solo_build)
     endif()
-endif()
-
-if("${PAW_STATIC}" STREQUAL "yes")
-    add_compile_options(-DPAW_STATIC -static)
-    add_link_options(-static)
 endif()
 
 if("${NEED_DBG}" STREQUAL "yes")
@@ -118,18 +119,58 @@ find_package(FLEX REQUIRED)
 
 flex_target(Dogmatic src/dogma/lex.l ${CMAKE_CURRENT_BINARY_DIR}/dogma/lex.yy.c)
 
+string(TIMESTAMP CURRENT_DATE "%d-%m-%Y %H:%M:%S")
+set(BUILD_DATE ${CURRENT_DATE})
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    set(GCC_VER "GCC ${CMAKE_C_COMPILER_VERSION}")
+else()
+    set(GCC_VER "N/A (Not GCC)")
+endif()
+
+find_package(Git)
+
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref HEAD
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_BRANCH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+else()
+    set(GIT_BRANCH "unknown")
+endif()
+
+if(NOT GIT_BRANCH OR "${GIT_BRANCH}" STREQUAL "")
+    set(GIT_BRANCH "detached")
+endif()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/meta.c"
+    "${CMAKE_CURRENT_BINARY_DIR}/genmeta.c"
+    @ONLY
+)
+
 file(GLOB DOGMA_SRCS "src/dogma/*.c")
 list(APPEND DOGMA_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/common/lson.c")
+list(APPEND DOGMA_SRCS "${CMAKE_CURRENT_BINARY_DIR}/genmeta.c")
 
 add_compile_options(-Wall -Wextra -include ${CMAKE_CURRENT_SOURCE_DIR}/include/prel.h)
 
 add_library(dogma_s STATIC ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
 set_target_properties(dogma_s PROPERTIES OUTPUT_NAME dogma)
 target_link_libraries(dogma_s PRIVATE nu_static)
+target_link_options(dogma_s PRIVATE -static)
 
 if(NOT "${PAW_TARGET}" STREQUAL "wasi")
     add_library(dogma_d SHARED ${DOGMA_SRCS} ${FLEX_Dogmatic_OUTPUTS})
     set_target_properties(dogma_d PROPERTIES OUTPUT_NAME dogma)
+endif()
+
+if("${PAW_STATIC}" STREQUAL "yes")
+    add_compile_options(-DPAW_STATIC -static)
+    add_link_options(-static)
 endif()
 
 if(NOT DOGMAONLY)

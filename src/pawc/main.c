@@ -65,10 +65,12 @@ int main(int argc, char **argv) {
     }
 
     if (argc < 2) {
+        // Carrot 0.5.1 [NekoMimi] (main, 2026-09-27 22:56:21) [GCC 16.2.1] on linux
+        glog_log(NULL, 0, 0, GLOG_NOTEXT, _("PawC (%s, %s) [%s] on %s"), dogma_get_branch(), dogma_get_compile_date(), dogma_get_gcc(), dogma_get_platform());
         glog_log(NULL, 0, 0, GLOG_NOTEXT, _("Usage: %s [options] <source_file>"), get_basename(argv[0]));
-	glog_log(NULL, 0, 0, GLOG_NOTEXT, _("Options:"));
-	glog_log(NULL, 0, 0, GLOG_NOTEXT, _(" -D<name>       Defines a preprocessor variable"));
-	glog_log(NULL, 0, 0, GLOG_NOTEXT, _(" -I<path>       Includes a folder into the global list"));
+        glog_log(NULL, 0, 0, GLOG_NOTEXT, _("Options:"));
+        glog_log(NULL, 0, 0, GLOG_NOTEXT, _(" -D<name>       Defines a preprocessor variable"));
+        glog_log(NULL, 0, 0, GLOG_NOTEXT, _(" -I<path>       Includes a folder into the global list"));
         goto fail;
     }
 
