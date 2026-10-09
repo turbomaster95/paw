@@ -1,0 +1,21 @@
+[stage]
+name = "build"
+timeout = 600
+retries = 1
+
+[[steps]]
+name = "configure"
+run = "cmake -S . -B build -DPAW_"
+
+[[steps]]
+name = "compile"
+run = "cmake --build build --parallel 2"
+timeout = 120
+
+[artifacts]
+paths = [
+  "build/pawc",
+  "build/pawv", 
+  "build/libpaw.so",
+  "build/libpaw.a",
+]
