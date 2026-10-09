@@ -20,6 +20,6 @@ timeout = 120
 paths = [
   "build/pawc",
   "build/pawv", 
-  "build/libpaw.so",
-  "build/libpaw.a",
+  "build/libdogma.so",
+  "build/libdogma.a",
 ]
