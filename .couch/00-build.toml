@@ -5,7 +5,7 @@ retries = 1
 
 [[steps]]
 name = "configure"
-run = "cmake -S . -B build -DPAW_"
+run = "cmake -S . -B build -DPAW_TARGET=native"
 
 [[steps]]
 name = "compile"
