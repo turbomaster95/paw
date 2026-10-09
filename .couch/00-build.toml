@@ -4,6 +4,10 @@ timeout = 600
 retries = 1
 
 [[steps]]
+name = "update"
+run = "git submodule update --init --recursive --force"
+
+[[steps]]
 name = "configure"
 run = "cmake -S . -B build -DPAW_TARGET=native"
 
