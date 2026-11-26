@@ -1,5 +1,5 @@
-	    The Nicense Software License
-                    Version 1.1
+            The Nicense Software License
+                    Version 1.2
 
 Copyright (c) 2026 Deva Midhun. All rights reserved.
 
@@ -44,7 +44,7 @@ SECTION 0 — DEFINITIONS
                     any third party by any means, including but not limited to
                     electronic transmission, physical media, or network access.
 
-"License"           means this Nicense Software License, Version 1.1.
+"License"           means this Nicense Software License, Version 1.2.
 
 "NOTICE file"       means a human-readable file named "NOTICE" distributed with
                     the Work that contains attribution information required by
@@ -84,7 +84,7 @@ grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,
 irrevocable patent license to make, have made, use, offer to sell, sell,
 import, and otherwise transfer the Work. This grant applies only to those
 patent claims licensable by such Contributor that are necessarily infringed
-by their Contribution(s) alone or by combination of their Contribution(s)
+by their Contribution(s) alone or in combination of their Contribution(s)
 with the Work to which such Contribution(s) was submitted.
 
 If You institute patent litigation against any entity (including a cross-claim
@@ -127,7 +127,7 @@ conditions:
       file in any Derivative Works that You distribute.
 
   (f) OBJECT FORM NOTICE. When distributing the Work or Derivative Works in
-      Object Form (e.g., compiled binaries, minified files, firmware), You
+      Object Form (e.g. compiled binaries, minified files, firmware), You
       must ensure that the copyright notice and a reference to this License
       are either embedded in the Object Form itself, displayed at runtime
       where technically feasible, or provided in accompanying documentation.
@@ -135,7 +135,7 @@ conditions:
   (g) SAAS AND NETWORK USE. If You operate the Software or a Derivative Work
       as a service made available to third parties over a network, You must
       make this License and the applicable copyright notice accessible to
-      users of that service (e.g., in a legal notices or attribution page).
+      users of that service (e.g. in a legal notices or attribution page).
 
   (h) NO MISREPRESENTATION. You must not represent any Derivative Work as the
       original Work, nor claim authorship over unmodified portions of the
@@ -172,9 +172,9 @@ SECTION 6 — PRIVACY AND DATA
 
 If the Software collects, processes, or transmits personal data, You are
 solely responsible for ensuring that any such use complies with all applicable
-privacy and data protection laws in the jurisdictions in which You operate
-or in which Your users are located. The Author makes no representation that
-the Software is compliant with any particular privacy law or regulation.
+privacy and data protection laws in the jurisdictions in which You operate or
+in which Your users are located. The Author makes no representation that the
+Software is compliant with any particular privacy law or regulation.
 
 --------------------------------------------------------------------------------
 SECTION 7 — EXPORT COMPLIANCE
@@ -201,8 +201,8 @@ AND CONTRIBUTORS MAKE NO WARRANTY THAT:
   (d) ANY ERRORS IN THE SOFTWARE WILL BE CORRECTED.
 
 YOU ASSUME ALL RISKS ASSOCIATED WITH THE QUALITY AND PERFORMANCE OF THE
-SOFTWARE. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME THE ENTIRE COST
-OF ALL NECESSARY SERVICING, REPAIR, OR CORRECTION. SOME JURISDICTIONS DO NOT
+SOFTWARE. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME THE ENTIRE COST OF
+ALL NECESSARY SERVICING, REPAIR, OR CORRECTION. SOME JURISDICTIONS DO NOT
 ALLOW THE EXCLUSION OF IMPLIED WARRANTIES — IN SUCH CASES, THIS EXCLUSION
 APPLIES TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
 
@@ -216,7 +216,7 @@ BE LIABLE TO YOU FOR ANY DAMAGES, INCLUDING ANY DIRECT, INDIRECT, INCIDENTAL,
 SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES OF ANY CHARACTER
 (INCLUDING BUT NOT LIMITED TO: DAMAGES FOR LOSS OF GOODWILL, BUSINESS
 INTERRUPTION, DATA LOSS, LOSS OF PROFITS, OR PROCUREMENT OF SUBSTITUTE GOODS
-OR SERVICES), EVEN IF THE AUTHOR OR CONTRIBUTOR HAS BEEN ADVISED OF THE
+OR SERVICES), EVEN IF THE AUTHOR OR CONTRIBUTORS HAVE BEEN ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGES.
 
 THIS LIMITATION APPLIES:
@@ -227,26 +227,11 @@ THIS LIMITATION APPLIES:
       OR FROM ANY OTHER CAUSE RELATED TO THIS LICENSE.
 
 SOME JURISDICTIONS DO NOT ALLOW THE LIMITATION OR EXCLUSION OF INCIDENTAL OR
-CONSEQUENTIAL DAMAGES — IN SUCH CASES, THIS LIMITATION APPLIES TO THE MAXIMUM
-EXTENT PERMITTED BY APPLICABLE LAW.
+CONSEQUENTIAL DAMAGES — IN SUCH CASES, THIS LIMITATION APPLIES TO THE
+MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
 
 --------------------------------------------------------------------------------
-SECTION 10 — INDEMNIFICATION
---------------------------------------------------------------------------------
-
-You agree to indemnify, defend, and hold harmless the Author and all
-Contributors from and against any and all claims, damages, losses, liabilities,
-costs, and expenses (including reasonable attorneys' fees) arising out of or
-relating to:
-
-  (a) Your use, modification, or distribution of the Software;
-  (b) Your violation of any term of this License;
-  (c) Any product, service, or Derivative Work You create using the Software;
-  (d) Your violation of any applicable law or third-party right in connection
-      with the use or distribution of the Software.
-
---------------------------------------------------------------------------------
-SECTION 11 — GOVERNING LAW AND DISPUTE RESOLUTION
+SECTION 10 — GOVERNING LAW AND DISPUTE RESOLUTION
 --------------------------------------------------------------------------------
 
 This License shall be governed by and construed in accordance with applicable
@@ -256,7 +241,7 @@ negotiation between the parties. If unresolved within thirty (30) days, either
 party may pursue any remedy available under applicable law.
 
 --------------------------------------------------------------------------------
-SECTION 12 — TERMINATION
+SECTION 11 — TERMINATION
 --------------------------------------------------------------------------------
 
 (a) AUTOMATIC TERMINATION. Your rights under this License shall terminate
@@ -271,11 +256,11 @@ SECTION 12 — TERMINATION
     becoming aware of it, Your rights may be reinstated at the Author's
     sole discretion.
 
-(d) SURVIVAL. Sections 0, 8, 9, 10, and 11 shall survive any termination
+(d) SURVIVAL. Sections 0, 8, 9, and 10 shall survive any termination
     of this License.
 
 --------------------------------------------------------------------------------
-SECTION 13 — SEVERABILITY AND WAIVER
+SECTION 12 — SEVERABILITY AND WAIVER
 --------------------------------------------------------------------------------
 
 If any provision of this License is held to be unenforceable or invalid under
@@ -287,10 +272,10 @@ The Author's failure to enforce any provision of this License shall not
 constitute a waiver of that provision or any future right to enforce it.
 
 --------------------------------------------------------------------------------
-SECTION 14 — ENTIRE AGREEMENT
+SECTION 13 — ENTIRE AGREEMENT
 --------------------------------------------------------------------------------
 
 This License constitutes the entire agreement between You and the Author
 with respect to the Software and supersedes all prior or contemporaneous
 understandings, representations, or agreements regarding the Software, unless
-You have a separate written agreement executed with the Author.
+You have a separate written agreement executed with the Author.   
